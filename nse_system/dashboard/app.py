@@ -4,6 +4,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
+import sys
+
+# Ensure root package is in sys.path for Streamlit Cloud
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from nse_system.data.symbols import NSE_INDICES, NSE_EQUITIES, get_symbol_info, get_all_sector_indices
 from nse_system.data.universe import UniverseManager
