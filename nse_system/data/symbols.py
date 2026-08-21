@@ -50,17 +50,28 @@ NSE_EQUITIES = {
 }
 
 ALIAS_MAP = {
+    'MUTHOOT': 'MUTHOOTFIN',
+    'MUTHOOTFINANCE': 'MUTHOOTFIN',
     'BAJAJAUTO': 'BAJAJ-AUTO',
     'BAJAJ_AUTO': 'BAJAJ-AUTO',
     'MM': 'M&M',
     'MNM': 'M&M',
+    'MAHINDRA': 'M&M',
     'NIFTY': 'NIFTY 50',
     'BANKNIFTY': 'NIFTY BANK',
     'NIFTYBANK': 'NIFTY BANK',
     'FIN_NIFTY': 'FINNIFTY',
     'TATAPOWER': 'TATAPOWER',
+    'TATAMOTOR': 'TATAMOTORS',
+    'RELIANCEIND': 'RELIANCE',
+    'HDFC': 'HDFCBANK',
+    'ICICI': 'ICICIBANK',
+    'KOTAK': 'KOTAKBANK',
+    'BHARTI': 'BHARTIARTL',
+    'AIRTEL': 'BHARTIARTL',
     'LTTD': 'LT',
-    'ADANI': 'ADANIENT'
+    'ADANI': 'ADANIENT',
+    'ADANIENTERPRISE': 'ADANIENT'
 }
 
 def get_symbol_info(symbol: str) -> SymbolInfo:

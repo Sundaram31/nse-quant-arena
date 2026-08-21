@@ -25,18 +25,18 @@ class FIIDIIDataProvider:
 
         return FIIDIIData(
             date=today.strftime('%Y-%m-%d'),
-            fii_buy=8450.25,
-            fii_sell=9033.61,
+            fii_cash_buy=8450.25,
+            fii_cash_sell=9033.61,
             fii_cash_net=fii_cash,
-            dii_buy=12650.80,
-            dii_sell=9113.09,
+            dii_cash_buy=12650.80,
+            dii_cash_sell=9113.09,
             dii_cash_net=dii_cash,
             fii_fut_long=fii_fut_long,
             fii_fut_short=fii_fut_short,
             fii_fut_ratio=fii_fut_ratio,
             fii_call_oi=342000,
             fii_put_oi=318000,
-            institutional_bias='DII DRIVEN ACCUMULATION' if dii_cash > 2500 else 'NEUTRAL'
+            institutional_bias='BULLISH' if dii_cash > 2500 else ('BEARISH' if fii_cash < -1500 else 'NEUTRAL')
         )
 
     def get_historical_fii_dii(self, days: int = 30) -> List[FIIDIIData]:

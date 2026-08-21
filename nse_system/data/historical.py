@@ -11,6 +11,7 @@ from nse_system.core.models import Candle
 from nse_system.core.constants import MarketHours
 from nse_system.data.base import BaseDataProvider
 from nse_system.data.symbols import get_symbol_info
+from nse_system.data.stock_prices import NSE_REAL_PRICES
 
 DEFAULT_PRICES = {
     'NIFTY 50': 24500.0,
@@ -115,7 +116,9 @@ class NSEHistoricalDataProvider(BaseDataProvider):
     ) -> pd.DataFrame:
         """Generates realistic intraday/daily market series conforming to NSE market microstructure."""
         # Determine base price
-        base_price = DEFAULT_PRICES.get(symbol, 1000.0)
+        sym_info = get_symbol_info(symbol)
+        clean_sym = sym_info.symbol
+        base_price = NSE_REAL_PRICES.get(clean_sym, DEFAULT_PRICES.get(clean_sym, 1000.0))
 
         # Parse timeframe delta
         tf_mins = 5

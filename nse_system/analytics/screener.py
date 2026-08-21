@@ -335,10 +335,18 @@ class QuantStockScreener:
             confidence = 75.0
         else:
             verdict = '⚪ CONSOLIDATION / RANGEBOUND'
-            rec_setup = 'CPR MEAN REVERSION / RANGE PLAY'
-            sl = round(cpr.bc, 2)
-            t1 = round(cpr.tc, 2)
-            t2 = round(cpr.r1, 2)
+            if curr_price <= cpr.pivot:
+                rec_setup = 'CPR MEAN REVERSION (BUY DIP AT SUPPORT)'
+                sl = round(min(curr_price - (1.0 * atr_val), cpr.s1), 2)
+                risk = max(1.0, curr_price - sl)
+                t1 = round(curr_price + (1.5 * risk), 2)
+                t2 = round(curr_price + (2.5 * risk), 2)
+            else:
+                rec_setup = 'CPR MEAN REVERSION (SELL POP AT RESISTANCE)'
+                sl = round(max(curr_price + (1.0 * atr_val), cpr.r1), 2)
+                risk = max(1.0, sl - curr_price)
+                t1 = round(curr_price - (1.5 * risk), 2)
+                t2 = round(curr_price - (2.5 * risk), 2)
             confidence = 58.0
 
         return {
