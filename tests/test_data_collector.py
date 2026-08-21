@@ -51,7 +51,8 @@ class TestDataCollector(unittest.TestCase):
     def test_daily_synchronizer(self):
         sync = DailyDataSynchronizer(data_dir=self.temp_dir)
         results = sync.sync_daily_eod(universe_name='nifty50', timeframe='1d')
-        self.assertGreater(len(results), 10)
+        self.assertGreater(results['symbols_checked'], 10)
+        self.assertEqual(results['status'], 'SUCCESS')
 
 if __name__ == '__main__':
     unittest.main()

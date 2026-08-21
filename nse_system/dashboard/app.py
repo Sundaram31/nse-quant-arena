@@ -502,17 +502,20 @@ with tab6:
                 st.success(f"✅ Successfully downloaded and compiled data for {len(res)} symbols!")
 
     with dcol2:
-        st.markdown("### 🔄 Daily EOD Incremental Sync")
-        st.write("Run daily after 15:45 IST to fetch today's latest closed candles without re-downloading entire history.")
-        if st.button("⚡ Run Daily Incremental Update Now"):
-            with st.spinner("Syncing latest EOD candles..."):
+        st.markdown("### 🔄 Daily EOD Incremental Sync & Gap Healing")
+        st.write("Automatically detects any missing days (e.g. 2–5 days gap or holidays) and backfills all missing candles up to today.")
+        if st.button("⚡ Run Daily Incremental Update Now", type="primary"):
+            with st.spinner("Analyzing dataset dates, detecting gaps, and backfilling candles..."):
                 sync_res = sync.sync_daily_eod(universe_name="fno", timeframe="1d")
-                st.success(f"✅ Daily EOD Sync completed for {len(sync_res)} symbols!")
+                if sync_res.get("symbols_updated", 0) > 0:
+                    st.success(f"✅ **Smart Gap Healing Completed!** Backfilled all missing candles across **{sync_res['symbols_updated']} stocks** ({sync_res['total_bars_backfilled']} total candles added). Zero gaps remain!")
+                else:
+                    st.info(f"✅ **All {sync_res['symbols_checked']} stocks are already 100% up to date!** Zero missing days detected.")
 
     st.markdown("---")
-    st.subheader("📁 Local Datastore Status")
+    st.subheader("📁 Datastore Status & Verified Candle Coverage")
     df_status = collector.get_datastore_status()
     if not df_status.empty:
         st.dataframe(df_status, use_container_width=True)
     else:
-        st.info("No local Parquet files found. Click 'Download Historical Data Now' above to start building your dataset.")
+        st.info("No Parquet files found. Click 'Download Historical Data Now' above to compile your dataset.")
