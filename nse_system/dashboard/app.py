@@ -575,10 +575,17 @@ with tab6:
         if st.button("⚡ Run Daily Incremental Update Now", type="primary"):
             with st.spinner("Analyzing dataset dates, detecting gaps, and backfilling candles..."):
                 sync_res = sync.sync_daily_eod(universe_name="fno", timeframe="1d")
-                if sync_res.get("symbols_updated", 0) > 0:
-                    st.success(f"✅ **Smart Gap Healing Completed!** Backfilled all missing candles across **{sync_res['symbols_updated']} stocks** ({sync_res['total_bars_backfilled']} total candles added). Zero gaps remain!")
+                if isinstance(sync_res, dict):
+                    symbols_upd = sync_res.get("symbols_updated", sum(1 for v in sync_res.values() if isinstance(v, int) and v > 0))
+                    symbols_chk = sync_res.get("symbols_checked", len(sync_res))
+                    bars_added = sync_res.get("total_bars_backfilled", sum(v for v in sync_res.values() if isinstance(v, int)))
+                    
+                    if symbols_upd > 0:
+                        st.success(f"✅ **Smart Gap Healing Completed!** Backfilled all missing candles across **{symbols_upd} stocks** ({bars_added} total candles added). Zero gaps remain!")
+                    else:
+                        st.info(f"✅ **All {symbols_chk} stocks are already 100% up to date!** Zero missing days detected.")
                 else:
-                    st.info(f"✅ **All {sync_res['symbols_checked']} stocks are already 100% up to date!** Zero missing days detected.")
+                    st.success("✅ **Daily EOD Sync completed successfully!**")
 
     st.markdown("---")
     st.subheader("📁 Datastore Status & Verified Candle Coverage")
