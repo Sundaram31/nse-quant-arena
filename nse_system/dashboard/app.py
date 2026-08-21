@@ -114,7 +114,7 @@ else:
 selected_symbol = st.sidebar.selectbox("Select Instrument / Stock", stock_list, index=default_idx)
 timeframe = st.sidebar.selectbox("Timeframe", ["5m", "15m", "30m", "1h", "1d"], index=0)
 lookback_days = st.sidebar.slider("Lookback Window (Days)", min_value=5, max_value=90, value=30, step=5)
-vix_input = st.sidebar.slider("India VIX Level", min_value=9.0, max_value=35.0, value=14.5, step=0.5)
+vix_input = st.sidebar.slider("India VIX Level", min_value=8.0, max_value=35.0, value=11.2, step=0.1)
 capital = st.sidebar.number_input("Trading Capital (INR)", min_value=10000.0, max_value=10000000.0, value=100000.0, step=25000.0)
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
