@@ -241,13 +241,21 @@ with tab2:
                 return f"{sym} • {info.name} ({info.sector})"
             return sym
 
-        fav_stock = st.selectbox(
-            "🔍 Auto-Complete Stock Search (Start typing company name or ticker, e.g. Muthoot, Bajaj, Tata, Reliance):",
-            all_fno_500,
-            index=all_fno_500.index("MUTHOOTFIN") if "MUTHOOTFIN" in all_fno_500 else 0,
-            format_func=format_stock_label,
-            key="auto_stock_select"
-        )
+        d_col1, d_col2 = st.columns([4, 1])
+        with d_col1:
+            fav_stock = st.selectbox(
+                "🔍 Auto-Complete Stock Search (Start typing company name or ticker, e.g. Muthoot, Bajaj, Tata, Reliance):",
+                all_fno_500,
+                index=all_fno_500.index("MUTHOOTFIN") if "MUTHOOTFIN" in all_fno_500 else 0,
+                format_func=format_stock_label,
+                key="auto_stock_select"
+            )
+        with d_col2:
+            st.write("")
+            st.write("")
+            if st.button("🔄 Force Refresh", key="force_refresh_tab2_btn"):
+                st.cache_data.clear()
+                st.rerun()
 
         if fav_stock:
             with st.spinner(f"Running 360° analysis for {fav_stock}..."):

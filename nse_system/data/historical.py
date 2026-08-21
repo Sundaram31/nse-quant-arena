@@ -87,6 +87,7 @@ class NSEHistoricalDataProvider(BaseDataProvider):
         # 1. Check local / bundled Parquet Datastore first
         possible_paths = [
             os.path.join(os.path.dirname(__file__), 'datastore', f"{clean_sym}_{timeframe}.parquet"),
+            os.path.join(os.getcwd(), 'nse_system', 'data', 'datastore', f"{clean_sym}_{timeframe}.parquet"),
             os.path.join(self.cache_dir, 'data', f"{clean_sym}_{timeframe}.parquet"),
             os.path.join(self.cache_dir, f"{clean_sym}_{timeframe}.parquet")
         ]
