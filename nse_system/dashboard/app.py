@@ -34,13 +34,49 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Responsive CSS
+# Mobile & Cross-Platform High-Contrast Responsive CSS
 st.markdown("""
 <style>
     .main-title { font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-bottom: 0.1rem; }
     .sub-title { font-size: 0.95rem; color: #64748B; margin-bottom: 1.2rem; }
     .winner-box { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; }
-    .stMetric { background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 0.8rem; border-radius: 10px; }
+    .diag-card { background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-bottom: 1rem; color: #0F172A; }
+    .news-card { background: #F8FAFC; border-left: 4px solid #3B82F6; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #0F172A; }
+    
+    /* Universal High-Contrast Metric Cards for Android / iOS / Desktop (Light & Dark Mode) */
+    [data-testid="stMetric"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        padding: 0.9rem 1.1rem !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
+    }
+    [data-testid="stMetricValue"] > div {
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        color: #0F172A !important; /* Force high contrast dark text */
+    }
+    [data-testid="stMetricLabel"] > div > p {
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        color: #475569 !important; /* Force readable slate label */
+    }
+    [data-testid="stMetricDelta"] > div {
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+    }
+
+    /* Mobile 2-column wrapping for small screens */
+    @media (max-width: 768px) {
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+        }
+        [data-testid="column"] {
+            min-width: 46% !important;
+            flex: 1 1 46% !important;
+            margin-bottom: 0.6rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +128,13 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 # TAB 1: Market Intelligence & RRG
 with tab1:
-    st.subheader("📡 Institutional Flows & Derivatives Sentiment")
+    t1_col1, t1_col2 = st.columns([3, 1])
+    with t1_col1:
+        st.subheader("📡 Institutional Flows & Derivatives Sentiment")
+    with t1_col2:
+        if st.button("🔄 Refresh Sentiment", key="ref_fii_btn"):
+            st.rerun()
+
     fii_latest = fii_provider.get_latest_fii_dii_data()
     vix_info = VolatilityEngine.analyze_india_vix(vix_input)
 
