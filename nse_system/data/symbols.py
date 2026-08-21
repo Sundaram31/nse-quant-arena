@@ -49,8 +49,23 @@ NSE_EQUITIES = {
     'NTPC': SymbolInfo('NTPC', 'NTPC Ltd.', 'Energy & Power', 1500, 0.05, False, 'NTPC.NS'),
 }
 
+ALIAS_MAP = {
+    'BAJAJAUTO': 'BAJAJ-AUTO',
+    'BAJAJ_AUTO': 'BAJAJ-AUTO',
+    'MM': 'M&M',
+    'MNM': 'M&M',
+    'NIFTY': 'NIFTY 50',
+    'BANKNIFTY': 'NIFTY BANK',
+    'NIFTYBANK': 'NIFTY BANK',
+    'FIN_NIFTY': 'FINNIFTY',
+    'TATAPOWER': 'TATAPOWER',
+    'LTTD': 'LT',
+    'ADANI': 'ADANIENT'
+}
+
 def get_symbol_info(symbol: str) -> SymbolInfo:
-    sym = symbol.upper().replace('.NS', '').replace('^', '')
+    sym = symbol.upper().replace('.NS', '').replace('^', '').strip()
+    sym = ALIAS_MAP.get(sym, sym)
     if sym in NSE_INDICES:
         return NSE_INDICES[sym]
     if sym in NSE_EQUITIES:

@@ -227,15 +227,20 @@ with tab2:
         st.markdown("### 🔎 360° Quantitative & Fundamental Health Diagnosis")
         st.write("Type or select **any NSE Stock** to inspect its Price Structure, Volume Footprints, CPR Pivots, and Live News / Earnings Sentiment:")
         
-        all_fno_500 = list(dict.fromkeys(["MCX", "ADANIGREEN", "AARTIIND", "TATAMOTORS", "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "ZOMATO"] + UniverseManager.get_fno_symbols()))
+        all_fno_500 = sorted(list(dict.fromkeys(["MCX", "BAJAJ-AUTO", "ADANIGREEN", "AARTIIND", "TATAMOTORS", "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "ZOMATO"] + UniverseManager.get_fno_symbols())))
         
-        diag_col1, diag_col2 = st.columns([3, 1])
+        diag_col1, diag_col2 = st.columns([2, 1])
         with diag_col1:
-            fav_stock = st.text_input("Enter Stock Ticker Symbol:", value="MCX").upper().strip()
+            stock_choice = st.selectbox(
+                "Search & Select NSE Stock (Type to filter):",
+                all_fno_500,
+                index=all_fno_500.index("MCX") if "MCX" in all_fno_500 else 0,
+                key="single_stock_select"
+            )
         with diag_col2:
-            quick_pick = st.selectbox("Quick Pick Popular:", all_fno_500[:30], index=0)
-            if quick_pick and quick_pick != fav_stock:
-                fav_stock = quick_pick
+            custom_input = st.text_input("Or Type Any Ticker:", placeholder="e.g. BAJAJAUTO, SUZLON", key="single_stock_text").upper().strip()
+        
+        fav_stock = custom_input if custom_input else stock_choice
 
         if fav_stock:
             with st.spinner(f"Running 360° analysis for {fav_stock}..."):
