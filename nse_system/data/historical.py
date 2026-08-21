@@ -83,19 +83,23 @@ class NSEHistoricalDataProvider(BaseDataProvider):
         sym_info = get_symbol_info(symbol)
         clean_sym = sym_info.symbol
         key = f'{clean_sym}_{start_date.date()}_{end_date.date()}_{timeframe}'
-        # 1. Check local Parquet Datastore first
-        parquet_path = os.path.join(self.cache_dir, 'data', f"{clean_sym}_{timeframe}.parquet")
-        if os.path.exists(parquet_path):
-            try:
-                df = pd.read_parquet(parquet_path)
-                if not df.empty:
-                    # Filter date range
-                    df = df[(df.index >= pd.Timestamp(start_date)) & (df.index <= pd.Timestamp(end_date))]
-                    if len(df) >= 5:
-                        self._mem_cache[key] = df
-                        return df
-            except Exception:
-                pass
+        # 1. Check local / bundled Parquet Datastore first
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), 'datastore', f"{clean_sym}_{timeframe}.parquet"),
+            os.path.join(self.cache_dir, 'data', f"{clean_sym}_{timeframe}.parquet"),
+            os.path.join(self.cache_dir, f"{clean_sym}_{timeframe}.parquet")
+        ]
+        for p_path in possible_paths:
+            if os.path.exists(p_path):
+                try:
+                    df = pd.read_parquet(p_path)
+                    if not df.empty:
+                        df = df[(df.index >= pd.Timestamp(start_date)) & (df.index <= pd.Timestamp(end_date))]
+                        if len(df) >= 5:
+                            self._mem_cache[key] = df
+                            return df
+                except Exception:
+                    pass
 
         # 2. Fallback to high-fidelity market session generator
         df = self._generate_realistic_nse_data(clean_sym, start_date, end_date, timeframe)

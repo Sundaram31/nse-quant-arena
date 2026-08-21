@@ -14,7 +14,13 @@ class HistoricalDataCollector:
     """Downloads, compiles, and stores historical market data for NIFTY 500 and F&O universes."""
 
     def __init__(self, data_dir: Optional[str] = None):
-        self.data_dir = data_dir or os.path.expanduser('~/.cache/nse_system/data')
+        bundled_dir = os.path.join(os.path.dirname(__file__), 'datastore')
+        if data_dir:
+            self.data_dir = data_dir
+        elif os.path.exists(bundled_dir) and len(os.listdir(bundled_dir)) > 0:
+            self.data_dir = bundled_dir
+        else:
+            self.data_dir = os.path.expanduser('~/.cache/nse_system/data')
         os.makedirs(self.data_dir, exist_ok=True)
         self.provider = NSEHistoricalDataProvider(cache_dir=self.data_dir)
 
