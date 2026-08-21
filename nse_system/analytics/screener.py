@@ -319,11 +319,19 @@ class QuantStockScreener:
             t2 = round(curr_price - (3.0 * risk), 2)
             confidence = min(96.0, 50.0 + bearish_pts / 2.0)
         elif cpr.cpr_type == 'NARROW' or rel_vol > 1.5:
+            is_bull = curr_price >= prev_close
             verdict = '⚡ HIGH VOLATILITY / BREAKOUT'
-            rec_setup = 'INTRADAY ORB / CPR BREAKOUT'
-            sl = round(curr_price - (1.0 * atr_val), 2)
-            t1 = round(curr_price + (2.0 * atr_val), 2)
-            t2 = round(curr_price + (3.0 * atr_val), 2)
+            rec_setup = 'INTRADAY LONG BREAKOUT' if is_bull else 'INTRADAY SHORT BREAKDOWN'
+            if is_bull:
+                sl = round(curr_price - (1.0 * atr_val), 2)
+                risk = max(1.0, curr_price - sl)
+                t1 = round(curr_price + (2.0 * risk), 2)
+                t2 = round(curr_price + (3.0 * risk), 2)
+            else:
+                sl = round(curr_price + (1.0 * atr_val), 2)
+                risk = max(1.0, sl - curr_price)
+                t1 = round(curr_price - (2.0 * risk), 2)
+                t2 = round(curr_price - (3.0 * risk), 2)
             confidence = 75.0
         else:
             verdict = '⚪ CONSOLIDATION / RANGEBOUND'

@@ -341,7 +341,12 @@ with tab2:
             st.success(f"🎯 **Found {len(intra_picks)} Live Actionable Intraday Setups for Today:**")
             records = []
             for c in intra_picks:
-                badge = "🟢 INTRADAY LONG" if "LONG" in c.trading_type.value else "🔴 INTRADAY SHORT"
+                badge = {
+                    "INTRADAY_LONG": "🟢 INTRADAY LONG",
+                    "INTRADAY_SHORT": "🔴 INTRADAY SHORT",
+                    "SWING_LONG": "🟢 SWING LONG",
+                    "SWING_SHORT": "🔴 SWING SHORT"
+                }.get(c.trading_type.value, c.trading_type.value)
                 records.append({
                     "Symbol": c.symbol,
                     "Trade Setup": badge,
@@ -380,11 +385,20 @@ with tab2:
             swing_candidates = [c for c in swing_candidates if c.trading_type.value == "SWING_LONG"]
         elif swing_dir == "🔴 Swing Short Only":
             swing_candidates = [c for c in swing_candidates if c.trading_type.value == "SWING_SHORT"]
+        else:
+            # Filter strictly for Swing setups in the Swing Radar
+            swing_candidates = [c for c in swing_candidates if "SWING" in c.trading_type.value]
 
         if swing_candidates:
             s_records = []
             for c in swing_candidates:
-                badge = "🟢 SWING LONG" if c.trading_type.value == "SWING_LONG" else "🔴 SWING SHORT"
+                badge = {
+                    "SWING_LONG": "🟢 SWING LONG",
+                    "SWING_SHORT": "🔴 SWING SHORT",
+                    "INTRADAY_LONG": "⚡ INTRADAY LONG",
+                    "INTRADAY_SHORT": "⚡ INTRADAY SHORT"
+                }.get(c.trading_type.value, c.trading_type.value)
+
                 s_records.append({
                     "Symbol": c.symbol,
                     "Setup": badge,
