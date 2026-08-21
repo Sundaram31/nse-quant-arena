@@ -111,7 +111,13 @@ else:
     stock_list = UniverseManager.get_nifty_500_symbols()
     default_idx = stock_list.index("RELIANCE") if "RELIANCE" in stock_list else 0
 
-selected_symbol = st.sidebar.selectbox("Select Instrument / Stock", stock_list, index=default_idx)
+def format_sidebar_label(sym: str) -> str:
+    info = get_symbol_info(sym)
+    if info.name and info.name != sym:
+        return f"{sym} • {info.name}"
+    return sym
+
+selected_symbol = st.sidebar.selectbox("Select Instrument / Stock", stock_list, index=default_idx, format_func=format_sidebar_label)
 timeframe = st.sidebar.selectbox("Timeframe", ["5m", "15m", "30m", "1h", "1d"], index=0)
 lookback_days = st.sidebar.slider("Lookback Window (Days)", min_value=5, max_value=90, value=30, step=5)
 vix_input = st.sidebar.slider("India VIX Level", min_value=8.0, max_value=35.0, value=11.2, step=0.1)
@@ -227,20 +233,21 @@ with tab2:
         st.markdown("### 🔎 360° Quantitative & Fundamental Health Diagnosis")
         st.write("Type or select **any NSE Stock** to inspect its Price Structure, Volume Footprints, CPR Pivots, and Live News / Earnings Sentiment:")
         
-        all_fno_500 = sorted(list(dict.fromkeys(["MCX", "BAJAJ-AUTO", "ADANIGREEN", "AARTIIND", "TATAMOTORS", "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "ZOMATO"] + UniverseManager.get_fno_symbols())))
+        all_fno_500 = sorted(list(dict.fromkeys(["MUTHOOTFIN", "MCX", "BAJAJ-AUTO", "ADANIGREEN", "AARTIIND", "TATAMOTORS", "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "ITC", "LT", "ZOMATO", "SUZLON", "M&M", "TRENT", "BEL", "HAL"] + UniverseManager.get_fno_symbols())))
         
-        diag_col1, diag_col2 = st.columns([2, 1])
-        with diag_col1:
-            stock_choice = st.selectbox(
-                "Search & Select NSE Stock (Type to filter):",
-                all_fno_500,
-                index=all_fno_500.index("MCX") if "MCX" in all_fno_500 else 0,
-                key="single_stock_select"
-            )
-        with diag_col2:
-            custom_input = st.text_input("Or Type Any Ticker:", placeholder="e.g. BAJAJAUTO, SUZLON", key="single_stock_text").upper().strip()
-        
-        fav_stock = custom_input if custom_input else stock_choice
+        def format_stock_label(sym: str) -> str:
+            info = get_symbol_info(sym)
+            if info.name and info.name != sym:
+                return f"{sym} • {info.name} ({info.sector})"
+            return sym
+
+        fav_stock = st.selectbox(
+            "🔍 Auto-Complete Stock Search (Start typing company name or ticker, e.g. Muthoot, Bajaj, Tata, Reliance):",
+            all_fno_500,
+            index=all_fno_500.index("MUTHOOTFIN") if "MUTHOOTFIN" in all_fno_500 else 0,
+            format_func=format_stock_label,
+            key="auto_stock_select"
+        )
 
         if fav_stock:
             with st.spinner(f"Running 360° analysis for {fav_stock}..."):
