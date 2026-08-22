@@ -11,3 +11,5 @@ venv/
 env/
 *.key
 *.pem
+backups/*.tar.gz
+*.tar.gz
