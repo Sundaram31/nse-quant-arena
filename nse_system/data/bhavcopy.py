@@ -69,40 +69,5 @@ class NSEBhavcopyFetcher:
             except Exception:
                 continue
 
-        # Fallback synthetic EOD bhavcopy generator for offline / sandbox testing
-        return self._generate_synthetic_bhavcopy(trade_date)
-
-    def _generate_synthetic_bhavcopy(self, trade_date: date) -> pd.DataFrame:
-        """Generates realistic synthetic EOD bhavcopy matching market format."""
-        from nse_system.data.universe import UniverseManager
-        symbols = UniverseManager.get_fno_symbols()
-        records = []
-        import numpy as np
-        np.random.seed(int(trade_date.strftime('%Y%m%d')) % (2**32))
-
-        for sym in symbols:
-            base = 1500.0 + (abs(hash(sym)) % 3000)
-            ret = np.random.normal(0.001, 0.018)
-            close = round(base * (1 + ret), 2)
-            open_p = round(close * (1 + np.random.normal(0, 0.005)), 2)
-            high = round(max(open_p, close) * (1 + abs(np.random.normal(0, 0.008))), 2)
-            low = round(min(open_p, close) * (1 - abs(np.random.normal(0, 0.008))), 2)
-            vol = int(np.random.lognormal(12.0, 0.8))
-            deliv_pct = round(np.random.uniform(30.0, 65.0), 2)
-
-            records.append({
-                'SYMBOL': sym,
-                'SERIES': 'EQ',
-                'OPEN_PRICE': open_p,
-                'HIGH_PRICE': high,
-                'LOW_PRICE': low,
-                'CLOSE_PRICE': close,
-                'PREV_CLOSE': base,
-                'TTL_TRD_QNTY': vol,
-                'DELIV_QTY': int(vol * deliv_pct / 100.0),
-                'DELIV_PER': deliv_pct,
-                'DATE': trade_date.strftime('%Y-%m-%d')
-            })
-
-        df = pd.DataFrame(records)
-        return df
+        # If unreached or failed, return None explicitly (Zero-Mock Policy)
+        return None

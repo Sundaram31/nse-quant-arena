@@ -1,5 +1,5 @@
 """Interactive Visualization Components using Altair and Streamlit."""
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import pandas as pd
 import numpy as np
 import altair as alt
@@ -8,17 +8,42 @@ import streamlit as st
 from nse_system.analytics.rrg import RRGPoint
 from nse_system.core.models import OptionsChainData, Trade
 
-def plot_rrg_chart(rrg_data: Dict[str, RRGPoint]) -> alt.Chart:
+def plot_rrg_chart(rrg_data: Optional[Dict[str, RRGPoint]]) -> Optional[alt.Chart]:
     """Generates Julius de Kempenaer (JdK) 4-Quadrant Relative Rotation Graph."""
+    if not rrg_data:
+        empty_df = pd.DataFrame({'x': [100.0], 'y': [100.0], 'Message': ['RRG calculation requires active price data for benchmark and symbols']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(
+            x=alt.X('x:Q', scale=alt.Scale(domain=[90, 110])),
+            y=alt.Y('y:Q', scale=alt.Scale(domain=[90, 110])),
+            text='Message:N'
+        ).properties(
+            width=700,
+            height=450,
+            title='Relative Rotation Graph (RRG) - Awaiting Data'
+        )
+
     records = []
     for sym, pt in rrg_data.items():
-        records.append({
-            'Symbol': pt.name,
-            'RS_Ratio': pt.rs_ratio,
-            'RS_Momentum': pt.rs_momentum,
-            'Quadrant': pt.quadrant.value,
-            'Distance': pt.distance_from_center
-        })
+        if pt is not None and hasattr(pt, 'rs_ratio') and hasattr(pt, 'rs_momentum'):
+            records.append({
+                'Symbol': str(pt.name),
+                'RS_Ratio': float(pt.rs_ratio),
+                'RS_Momentum': float(pt.rs_momentum),
+                'Quadrant': str(pt.quadrant.value) if hasattr(pt.quadrant, 'value') else str(pt.quadrant),
+                'Distance': float(pt.distance_from_center)
+            })
+
+    if not records:
+        empty_df = pd.DataFrame({'x': [100.0], 'y': [100.0], 'Message': ['RRG calculation requires active price data for benchmark and symbols']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(
+            x=alt.X('x:Q', scale=alt.Scale(domain=[90, 110])),
+            y=alt.Y('y:Q', scale=alt.Scale(domain=[90, 110])),
+            text='Message:N'
+        ).properties(
+            width=700,
+            height=450,
+            title='Relative Rotation Graph (RRG) - Awaiting Data'
+        )
 
     df = pd.DataFrame(records)
 
@@ -107,3 +132,114 @@ def plot_equity_curve(equity_history: List[Dict[str, Any]]) -> alt.Chart:
         title='Portfolio Net Equity Curve (After All Indian Taxes & Brokerage)'
     )
     return chart
+
+def plot_stock_strategy_chart(
+    df: pd.DataFrame,
+    symbol: str,
+    entry_trigger: Optional[float] = None,
+    stop_loss: Optional[float] = None,
+    target_1: Optional[float] = None,
+    target_2: Optional[float] = None,
+    cpr: Optional[Any] = None,
+    strategy_name: Optional[str] = None,
+    num_bars: int = 60
+) -> alt.Chart:
+    """Plots interactive Candlestick chart overlaid with 9/21/50 EMAs, CPR Pivots, and Trade Blueprint Execution levels."""
+    if df.empty or len(df) < 5:
+        empty_df = pd.DataFrame({'x': [100.0], 'y': [100.0], 'Message': [f'Insufficient historical candle data for {symbol}']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(width=750, height=420)
+
+    plot_df = df.tail(num_bars).copy()
+    if 'timestamp' not in plot_df.columns:
+        plot_df['timestamp'] = plot_df.index
+
+    # Calculate Key Indicators
+    plot_df['ema9'] = plot_df['close'].ewm(span=9, adjust=False).mean()
+    plot_df['ema21'] = plot_df['close'].ewm(span=21, adjust=False).mean()
+    plot_df['ema50'] = plot_df['close'].ewm(span=50, adjust=False).mean()
+
+    # Price range for scaling
+    min_p = float(plot_df['low'].min()) * 0.98
+    max_p = float(plot_df['high'].max()) * 1.02
+    if stop_loss and stop_loss > 0:
+        min_p = min(min_p, stop_loss * 0.98)
+    if target_2 and target_2 > 0:
+        max_p = max(max_p, target_2 * 1.02)
+
+    # 1. Candlestick wicks (Rule)
+    rule = alt.Chart(plot_df).mark_rule().encode(
+        x=alt.X('timestamp:T', title='Date', axis=alt.Axis(format='%d-%b', labelAngle=-45)),
+        y=alt.Y('low:Q', scale=alt.Scale(domain=[min_p, max_p], zero=False), title='Price (INR)'),
+        y2='high:Q',
+        color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
+        tooltip=[
+            alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
+            alt.Tooltip('open:Q', title='Open', format=',.2f'),
+            alt.Tooltip('high:Q', title='High', format=',.2f'),
+            alt.Tooltip('low:Q', title='Low', format=',.2f'),
+            alt.Tooltip('close:Q', title='Close', format=',.2f'),
+            alt.Tooltip('volume:Q', title='Volume', format=',.0f')
+        ]
+    )
+
+    # 2. Candlestick bodies (Bar)
+    bar = alt.Chart(plot_df).mark_bar(size=7).encode(
+        x='timestamp:T',
+        y='open:Q',
+        y2='close:Q',
+        color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
+        tooltip=[
+            alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
+            alt.Tooltip('open:Q', title='Open', format=',.2f'),
+            alt.Tooltip('high:Q', title='High', format=',.2f'),
+            alt.Tooltip('low:Q', title='Low', format=',.2f'),
+            alt.Tooltip('close:Q', title='Close', format=',.2f'),
+            alt.Tooltip('volume:Q', title='Volume', format=',.0f')
+        ]
+    )
+
+    layers = [rule, bar]
+
+    # 3. Overlays: EMAs
+    ema9 = alt.Chart(plot_df).mark_line(color='#F59E0B', strokeWidth=1.5).encode(x='timestamp:T', y='ema9:Q')
+    ema21 = alt.Chart(plot_df).mark_line(color='#3B82F6', strokeWidth=1.5).encode(x='timestamp:T', y='ema21:Q')
+    ema50 = alt.Chart(plot_df).mark_line(color='#8B5CF6', strokeWidth=1.5).encode(x='timestamp:T', y='ema50:Q')
+    layers.extend([ema9, ema21, ema50])
+
+    # 4. CPR Overlay (if present)
+    if cpr and hasattr(cpr, 'pivot') and cpr.pivot > 0:
+        cpr_data = pd.DataFrame({
+            'y': [float(cpr.tc), float(cpr.pivot), float(cpr.bc)]
+        })
+        cpr_rule = alt.Chart(cpr_data).mark_rule(strokeDash=[4, 4], color='#64748B', strokeWidth=1.2).encode(y='y:Q')
+        layers.append(cpr_rule)
+
+    # 5. Blueprint Levels (Entry, SL, Target 1, Target 2)
+    levels_records = []
+    if entry_trigger and entry_trigger > 0:
+        levels_records.append({'y': float(entry_trigger), 'color': '#2563EB'})
+    if stop_loss and stop_loss > 0:
+        levels_records.append({'y': float(stop_loss), 'color': '#DC2626'})
+    if target_1 and target_1 > 0:
+        levels_records.append({'y': float(target_1), 'color': '#16A34A'})
+    if target_2 and target_2 > 0:
+        levels_records.append({'y': float(target_2), 'color': '#047857'})
+
+    for lvl in levels_records:
+        r_chart = alt.Chart(pd.DataFrame({'y': [lvl['y']]})).mark_rule(
+            strokeDash=[6, 3],
+            color=lvl['color'],
+            strokeWidth=2.0
+        ).encode(y='y:Q')
+        layers.append(r_chart)
+
+    title_text = f"{symbol} • Daily Candlesticks + EMAs (9/21/50) + CPR + Setup Levels"
+    if strategy_name:
+        title_text += f" [{strategy_name}]"
+
+    combined = alt.layer(*layers).properties(
+        width=750,
+        height=440,
+        title=title_text
+    )
+    return combined.interactive()

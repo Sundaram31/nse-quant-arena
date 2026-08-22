@@ -63,6 +63,8 @@ class HelegaMilegaStrategy(BaseStrategy):
         curr_vol = float(volumes.iloc[-1])
         has_volume = bool(curr_vol >= (vol_avg * self.params['vol_multiplier']))
 
+        rel_vol = float(curr_vol / max(1.0, vol_avg))
+
         # Long Signal: Fast crosses above Slow, Fast > 50, Price > VWAP, Volume surge
         if prev_fast <= prev_slow and curr_fast > curr_slow and curr_fast >= 50.0 and curr_close > curr_vwap and has_volume:
             sl = curr_close - (curr_atr * self.params['atr_sl_mult'])
@@ -76,7 +78,7 @@ class HelegaMilegaStrategy(BaseStrategy):
                 stop_loss=round(sl, 2),
                 target=round(target, 2),
                 confidence=0.88,
-                reason=f'Helega Milega Bullish Crossover (Fast: {curr_fast:.1f} > Slow: {curr_slow:.1f}, Vol: {curr_vol/vol_avg:.1f}x)'
+                reason=f'Helega Milega Bullish Crossover (Fast: {curr_fast:.1f} > Slow: {curr_slow:.1f}, Vol: {rel_vol:.1f}x)'
             )
 
         # Short Signal: Fast crosses below Slow, Fast < 50, Price < VWAP, Volume surge
@@ -92,7 +94,7 @@ class HelegaMilegaStrategy(BaseStrategy):
                 stop_loss=round(sl, 2),
                 target=round(target, 2),
                 confidence=0.88,
-                reason=f'Helega Milega Bearish Breakdown (Fast: {curr_fast:.1f} < Slow: {curr_slow:.1f}, Vol: {curr_vol/vol_avg:.1f}x)'
+                reason=f'Helega Milega Bearish Breakdown (Fast: {curr_fast:.1f} < Slow: {curr_slow:.1f}, Vol: {rel_vol:.1f}x)'
             )
 
         return None

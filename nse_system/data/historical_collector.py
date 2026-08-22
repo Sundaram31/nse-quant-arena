@@ -47,6 +47,10 @@ class HistoricalDataCollector:
                 existing_df = None
 
         new_df = self.provider.get_historical_dataframe(symbol, start_date, end_date, timeframe)
+        if new_df.empty:
+            bundled_fpath = os.path.join(os.path.dirname(__file__), 'datastore', f'{clean_sym}_{timeframe}.parquet')
+            if os.path.exists(bundled_fpath):
+                new_df = pd.read_parquet(bundled_fpath)
 
         if existing_df is not None and not existing_df.empty:
             merged_df = pd.concat([existing_df, new_df])
@@ -55,7 +59,8 @@ class HistoricalDataCollector:
         else:
             merged_df = new_df
 
-        merged_df.to_parquet(fpath, compression='snappy')
+        if not merged_df.empty:
+            merged_df.to_parquet(fpath, compression='snappy')
         return merged_df
 
     def download_universe(

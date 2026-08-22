@@ -14,6 +14,8 @@ from nse_system.data.fii_dii import FIIDIIDataProvider
 from nse_system.data.options_data import OptionsDataProvider
 from nse_system.data.streamer import MarketDataStreamer
 
+from nse_system.data.partitions import DatasetStage, DatasetPartitionManager
+
 __all__ = [
     'SymbolInfo', 'NSE_INDICES', 'NSE_EQUITIES', 'get_symbol_info',
     'get_all_sector_indices', 'get_fno_universe',
@@ -21,5 +23,6 @@ __all__ = [
     'BaseDataProvider', 'NSEHistoricalDataProvider',
     'NSEBhavcopyFetcher', 'HistoricalDataCollector', 'DailyDataSynchronizer',
     'FreeNSEMarketData',
-    'FIIDIIDataProvider', 'OptionsDataProvider', 'MarketDataStreamer'
+    'FIIDIIDataProvider', 'OptionsDataProvider', 'MarketDataStreamer',
+    'DatasetStage', 'DatasetPartitionManager'
 ]

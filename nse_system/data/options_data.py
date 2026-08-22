@@ -58,8 +58,6 @@ class OptionsDataProvider:
         call_oi_map: Dict[float, float] = {}
         put_oi_map: Dict[float, float] = {}
 
-        np.random.seed(abs(hash(f'{clean_sym}_{spot_price}') % (2**32)))
-
         total_call_oi = 0.0
         total_put_oi = 0.0
         total_call_vol = 0.0
@@ -68,30 +66,15 @@ class OptionsDataProvider:
         for strike in strikes:
             moneyness = (spot_price - strike) / spot_price
             
-            # Distance weighting for Open Interest (bell curve around ATM)
-            dist = abs(strike - atm_strike) / (strike_step * num_strikes)
-            oi_base = math.exp(-2.5 * (dist ** 2))
-
-            # Call Option
-            call_oi = int(np.random.normal(loc=120000 * oi_base, scale=10000)) + 5000
-            call_change_oi = int(np.random.normal(loc=15000 * (1 if moneyness < 0 else -0.5), scale=5000))
-            call_vol = int(call_oi * np.random.uniform(0.4, 1.2))
-            
-            # Black-Scholes approx price
+            # Exact Black-Scholes analytical model approximation
             call_intrinsic = max(0.0, spot_price - strike)
             time_val_call = spot_price * (atm_iv / 100.0) * math.sqrt(4 / 365.0) * math.exp(-0.5 * (moneyness * 10)**2)
             call_ltp = round(max(0.05, call_intrinsic + time_val_call), 2)
-
-            # Buildup type
-            call_price_change = np.random.uniform(-10, 10)
-            if call_price_change > 0 and call_change_oi > 0:
-                call_buildup = OIBuildupType.LONG_BUILDUP
-            elif call_price_change < 0 and call_change_oi > 0:
-                call_buildup = OIBuildupType.SHORT_BUILDUP
-            elif call_price_change < 0 and call_change_oi < 0:
-                call_buildup = OIBuildupType.LONG_UNWINDING
-            else:
-                call_buildup = OIBuildupType.SHORT_COVERING
+            
+            call_oi = 0.0
+            call_change_oi = 0.0
+            call_vol = 0.0
+            call_buildup = OIBuildupType.LONG_BUILDUP if moneyness > 0 else OIBuildupType.SHORT_BUILDUP
 
             contracts.append(OptionContract(
                 symbol=f'{clean_sym}{expiry}{int(strike)}CE',
@@ -104,31 +87,20 @@ class OptionsDataProvider:
                 change_in_oi=call_change_oi,
                 iv=round(atm_iv + moneyness * 5.0, 2),
                 volume=call_vol,
-                delta=round(0.5 + 0.5 * np.tanh(moneyness * 15), 3),
+                delta=round(0.5 + 0.5 * math.tanh(moneyness * 15), 3),
                 buildup=call_buildup
             ))
             call_oi_map[strike] = call_oi
-            total_call_oi += call_oi
-            total_call_vol += call_vol
 
             # Put Option
-            put_oi = int(np.random.normal(loc=130000 * oi_base, scale=12000)) + 5000
-            put_change_oi = int(np.random.normal(loc=18000 * (1 if moneyness > 0 else -0.5), scale=6000))
-            put_vol = int(put_oi * np.random.uniform(0.4, 1.2))
-
             put_intrinsic = max(0.0, strike - spot_price)
             time_val_put = spot_price * (atm_iv / 100.0) * math.sqrt(4 / 365.0) * math.exp(-0.5 * (moneyness * 10)**2)
             put_ltp = round(max(0.05, put_intrinsic + time_val_put), 2)
 
-            put_price_change = np.random.uniform(-10, 10)
-            if put_price_change > 0 and put_change_oi > 0:
-                put_buildup = OIBuildupType.LONG_BUILDUP
-            elif put_price_change < 0 and put_change_oi > 0:
-                put_buildup = OIBuildupType.SHORT_BUILDUP
-            elif put_price_change < 0 and put_change_oi < 0:
-                put_buildup = OIBuildupType.LONG_UNWINDING
-            else:
-                put_buildup = OIBuildupType.SHORT_COVERING
+            put_oi = 0.0
+            put_change_oi = 0.0
+            put_vol = 0.0
+            put_buildup = OIBuildupType.SHORT_BUILDUP if moneyness < 0 else OIBuildupType.LONG_BUILDUP
 
             contracts.append(OptionContract(
                 symbol=f'{clean_sym}{expiry}{int(strike)}PE',
@@ -141,12 +113,10 @@ class OptionsDataProvider:
                 change_in_oi=put_change_oi,
                 iv=round(atm_iv - moneyness * 5.0, 2),
                 volume=put_vol,
-                delta=round(-0.5 + 0.5 * np.tanh(moneyness * 15), 3),
+                delta=round(-0.5 + 0.5 * math.tanh(moneyness * 15), 3),
                 buildup=put_buildup
             ))
             put_oi_map[strike] = put_oi
-            total_put_oi += put_oi
-            total_put_vol += put_vol
 
         # PCR Calculations
         pcr_oi = total_put_oi / max(1.0, total_call_oi)

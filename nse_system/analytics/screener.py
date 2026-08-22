@@ -13,6 +13,7 @@ from nse_system.data.options_data import OptionsDataProvider
 from nse_system.data.news_sentiment import NewsSentimentEngine, StockSentimentReport
 from nse_system.indicators.technical import ema, sma, rsi, atr, vwap
 from nse_system.indicators.pivots import PivotEngine, CPRLevels
+from nse_system.indicators.fibonacci import FibonacciEngine, PriceActionDetector
 from nse_system.analytics.rrg import RRGAnalyzer, RRGQuadrant
 from nse_system.strategies import get_strategy
 
@@ -39,6 +40,7 @@ class ScreenerCandidate:
     oi_buildup: str
     catalyst_reason: str
     sentiment: str = '🟢 POSITIVE'
+    atr: float = 0.0
     timestamp: datetime = field(default_factory=datetime.now)
 
 class QuantStockScreener:
@@ -418,53 +420,109 @@ class QuantStockScreener:
         chain = self.options_provider.get_options_chain(symbol, curr_price, atm_iv=15.0)
         pcr = chain.pcr_oi
 
-        # -------------------------------------------------------------
-        # SETUP 1: SWING LONG (Momentum + Leadership + Bullish Alignment)
-        # -------------------------------------------------------------
-        if curr_price > ema21_val and ema9_val > ema21_val and rsi_val > 54.0 and quadrant_str in ('LEADING', 'IMPROVING'):
-            confidence = 65.0
-            if curr_price > ema50_val: confidence += 10.0
-            if quadrant_str == 'LEADING': confidence += 10.0
-            if 60.0 < rsi_val < 72.0: confidence += 5.0
-            if rel_vol > 1.2: confidence += 5.0
-            if pcr > 1.10: confidence += 5.0
+        # Fibonacci & Price Action Confluence
+        curr_high = float(highs.iloc[-1])
+        curr_low = float(lows.iloc[-1])
+        curr_open = float(df_daily['open'].iloc[-1])
+        prev_open = float(df_daily['open'].iloc[-2]) if len(df_daily) > 1 else curr_open
 
-            sl = round(min(curr_price - (1.5 * atr_val), cpr.bc), 2)
+        fib = FibonacciEngine.calculate_fibonacci_levels(df_daily, lookback_bars=35)
+        in_fib_pocket, fib_desc = FibonacciEngine.is_in_golden_pocket(curr_price, fib) if fib else (False, '')
+        
+        pa = PriceActionDetector.detect_candle_pattern(
+            open_p=curr_open,
+            high_p=curr_high,
+            low_p=curr_low,
+            close_p=curr_price,
+            prev_open=prev_open,
+            prev_close=prev_close
+        )
+
+        dist_from_50ema_pct = abs(curr_price - ema50_val) / ema50_val * 100
+
+        # -------------------------------------------------------------
+        # SETUP 0: FIBONACCI 50%-61.8% GOLDEN PULLBACK (Highest Conviction Swing Long)
+        # -------------------------------------------------------------
+        if in_fib_pocket and curr_price > ema50_val and (50.0 <= rsi_val <= 66.0) and quadrant_str in ('LEADING', 'IMPROVING'):
+            confidence = 80.0
+            if pa and pa.is_bullish: confidence += 10.0
+            if quadrant_str == 'LEADING': confidence += 5.0
+            if rel_vol > 1.2: confidence += 5.0
+
+            # Tight stop below 61.8% / 78.6% Fib level
+            sl_anchor = fib.fib_786 if (fib and fib.is_uptrend) else (curr_price - (1.1 * atr_val))
+            sl = round(min(sl_anchor, curr_price - (0.9 * atr_val)), 2)
             risk = max(1.0, curr_price - sl)
-            t1 = round(curr_price + (2.0 * risk), 2)
-            t2 = round(curr_price + (3.0 * risk), 2)
+            t1 = round(curr_price + (1.2 * risk), 2)  # 1:1.2 Scale-out
+            t2 = round(curr_price + (2.5 * risk), 2)  # 1:2.5 Runner
+
+            pattern_text = f" ({pa.pattern_name})" if pa else ""
+            return ScreenerCandidate(
+                symbol=symbol,
+                trading_type=TradingType.SWING_LONG,
+                matched_strategy='Fibonacci 50%-61.8% Golden Pullback + Support Bounce',
+                confidence_score=min(96.0, confidence),
+                current_price=curr_price,
+                entry_trigger=round(curr_price, 2),
+                stop_loss=sl,
+                target_1=t1,
+                target_2=t2,
+                risk_reward_ratio='1:1.2 (Target 1) | 1:2.5 (Target 2)',
+                rrg_quadrant=f'🟢 {quadrant_str}',
+                oi_buildup='Long Accumulation (Fib Support)',
+                catalyst_reason=f'{fib_desc}{pattern_text} with RRG {quadrant_str} alignment (RSI: {rsi_val:.1f})',
+                atr=round(atr_val, 2)
+            )
+
+        # -------------------------------------------------------------
+        # SETUP 1: SWING LONG (Momentum + Leadership + Sweet-Spot RSI + Base Proximity)
+        # -------------------------------------------------------------
+        if (curr_price > ema21_val and ema9_val > ema21_val and 
+            (52.0 <= rsi_val <= 66.0) and dist_from_50ema_pct <= 4.5 and 
+            quadrant_str in ('LEADING', 'IMPROVING')):
+            
+            confidence = 72.0
+            if curr_price > ema50_val: confidence += 8.0
+            if quadrant_str == 'LEADING': confidence += 10.0
+            if rel_vol > 1.2: confidence += 5.0
+            if pcr > 1.05: confidence += 5.0
+
+            sl = round(min(curr_price - (1.2 * atr_val), cpr.bc), 2)
+            risk = max(1.0, curr_price - sl)
+            t1 = round(curr_price + (1.2 * risk), 2)  # High-probability 1:1.2
+            t2 = round(curr_price + (2.5 * risk), 2)  # Runner 1:2.5
 
             return ScreenerCandidate(
                 symbol=symbol,
                 trading_type=TradingType.SWING_LONG,
-                matched_strategy='RRG Leadership + EMA Trend Alignment',
+                matched_strategy='RRG Leadership + 9/21 EMA Sweet-Spot Momentum',
                 confidence_score=min(95.0, confidence),
                 current_price=curr_price,
                 entry_trigger=round(curr_price, 2),
                 stop_loss=sl,
                 target_1=t1,
                 target_2=t2,
-                risk_reward_ratio='1:2.0 (Target 1) | 1:3.0 (Target 2)',
+                risk_reward_ratio='1:1.2 (Target 1) | 1:2.5 (Target 2)',
                 rrg_quadrant=f'🟢 {quadrant_str}',
-                oi_buildup='Long Buildup (PCR > 1.1)' if pcr > 1.0 else 'Neutral',
-                catalyst_reason=f'Trading in {quadrant_str} quadrant with 9/21 EMA Golden Cross (RSI: {rsi_val:.1f}, RelVol: {rel_vol:.1f}x)'
+                oi_buildup='Long Buildup (PCR > 1.05)' if pcr > 1.0 else 'Neutral',
+                catalyst_reason=f'Trading in {quadrant_str} quadrant near 50 EMA base ({dist_from_50ema_pct:.1f}% dist, RSI: {rsi_val:.1f})',
+                atr=round(atr_val, 2)
             )
 
         # -------------------------------------------------------------
         # SETUP 2: SWING SHORT (Breakdown + Underperformance + Bearish Trend)
         # -------------------------------------------------------------
-        if curr_price < ema21_val and ema9_val < ema21_val and rsi_val < 46.0 and quadrant_str in ('LAGGING', 'WEAKENING'):
-            confidence = 65.0
+        if curr_price < ema21_val and ema9_val < ema21_val and (34.0 <= rsi_val <= 48.0) and quadrant_str in ('LAGGING', 'WEAKENING'):
+            confidence = 70.0
             if curr_price < ema50_val: confidence += 10.0
             if quadrant_str == 'LAGGING': confidence += 10.0
-            if 25.0 < rsi_val < 40.0: confidence += 5.0
             if rel_vol > 1.2: confidence += 5.0
             if pcr < 0.85: confidence += 5.0
 
-            sl = round(max(curr_price + (1.5 * atr_val), cpr.tc), 2)
+            sl = round(max(curr_price + (1.2 * atr_val), cpr.tc), 2)
             risk = max(1.0, sl - curr_price)
-            t1 = round(curr_price - (2.0 * risk), 2)
-            t2 = round(curr_price - (3.0 * risk), 2)
+            t1 = round(curr_price - (1.2 * risk), 2)
+            t2 = round(curr_price - (2.5 * risk), 2)
 
             return ScreenerCandidate(
                 symbol=symbol,
@@ -476,14 +534,15 @@ class QuantStockScreener:
                 stop_loss=sl,
                 target_1=t1,
                 target_2=t2,
-                risk_reward_ratio='1:2.0 (Target 1) | 1:3.0 (Target 2)',
+                risk_reward_ratio='1:1.2 (Target 1) | 1:2.5 (Target 2)',
                 rrg_quadrant=f'🔴 {quadrant_str}',
                 oi_buildup='Short Buildup (Call Heavy)' if pcr < 0.9 else 'Unwinding',
-                catalyst_reason=f'Underperforming in {quadrant_str} quadrant with 9/21 EMA Death Cross (RSI: {rsi_val:.1f}, RelVol: {rel_vol:.1f}x)'
+                catalyst_reason=f'Underperforming in {quadrant_str} quadrant with 9/21 EMA Death Cross (RSI: {rsi_val:.1f}, RelVol: {rel_vol:.1f}x)',
+                atr=round(atr_val, 2)
             )
 
         # -------------------------------------------------------------
-        # SETUP 3: INTRADAY LONG / SHORT (Narrow CPR Breakout / High ATR)
+        # SETUP 3: INTRADAY / NARROW CPR BREAKOUT
         # -------------------------------------------------------------
         if is_narrow_cpr or rel_vol >= 1.5 or (rsi_val > 58.0 and curr_price > prev_high):
             is_bullish = curr_price >= prev_close
@@ -491,16 +550,16 @@ class QuantStockScreener:
             confidence = 70.0 + (10.0 if is_narrow_cpr else 0.0) + (5.0 if rel_vol > 1.8 else 0.0)
 
             if is_bullish:
-                sl = round(curr_price - (1.0 * atr_val), 2)
+                sl = round(curr_price - (0.9 * atr_val), 2)
                 risk = max(0.5, curr_price - sl)
-                t1 = round(curr_price + (2.0 * risk), 2)
-                t2 = round(curr_price + (3.0 * risk), 2)
+                t1 = round(curr_price + (1.2 * risk), 2)
+                t2 = round(curr_price + (2.5 * risk), 2)
                 reason = f'Narrow CPR ({cpr.cpr_width_pct:.2f}%) high-momentum breakout with {rel_vol:.1f}x volume spike'
             else:
-                sl = round(curr_price + (1.0 * atr_val), 2)
+                sl = round(curr_price + (0.9 * atr_val), 2)
                 risk = max(0.5, sl - curr_price)
-                t1 = round(curr_price - (2.0 * risk), 2)
-                t2 = round(curr_price - (3.0 * risk), 2)
+                t1 = round(curr_price - (1.2 * risk), 2)
+                t2 = round(curr_price - (2.5 * risk), 2)
                 reason = f'Narrow CPR breakdown below session low with high ATR volatility expansion'
 
             return ScreenerCandidate(
@@ -513,10 +572,11 @@ class QuantStockScreener:
                 stop_loss=sl,
                 target_1=t1,
                 target_2=t2,
-                risk_reward_ratio='1:2.0 (Target 1) | 1:3.0 (Target 2)',
+                risk_reward_ratio='1:1.2 (Target 1) | 1:2.5 (Target 2)',
                 rrg_quadrant=f'{quadrant_str}',
                 oi_buildup='High Volume Breakout',
-                catalyst_reason=reason
+                catalyst_reason=reason,
+                atr=round(atr_val, 2)
             )
 
         return None

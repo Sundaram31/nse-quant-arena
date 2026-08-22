@@ -131,3 +131,23 @@ class MarketRegimeClassifier:
             summary=summary,
             recommended_strategies=recommended
         )
+
+    @staticmethod
+    def classify_historical_series_regime(df: pd.DataFrame) -> pd.Series:
+        """Classifies each historical bar into 'BULL_PHASE', 'BEAR_PHASE', or 'SIDEWAYS_PHASE'."""
+        if df.empty or len(df) < 50:
+            return pd.Series('SIDEWAYS_PHASE', index=df.index)
+
+        ema50 = df['close'].ewm(span=50, adjust=False).mean()
+        ema200 = df['close'].ewm(span=min(len(df), 200), adjust=False).mean()
+        
+        # Bull: Price > 50 EMA & 50 EMA > 200 EMA
+        is_bull = (df['close'] > ema50) & (ema50 > ema200)
+        # Bear: Price < 50 EMA & 50 EMA < 200 EMA
+        is_bear = (df['close'] < ema50) & (ema50 < ema200)
+
+        regimes = pd.Series('SIDEWAYS_PHASE', index=df.index)
+        regimes[is_bull] = 'BULL_PHASE'
+        regimes[is_bear] = 'BEAR_PHASE'
+        return regimes
+

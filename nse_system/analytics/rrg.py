@@ -38,19 +38,7 @@ class RRGAnalyzer:
             }).dropna()
 
             if len(aligned_df) < (self.ratio_period + self.momentum_period):
-                # Fallback synthetic point if limited history
-                ratio = 100.0 + np.random.uniform(-4, 4)
-                momentum = 100.0 + np.random.uniform(-4, 4)
-                quad = self._get_quadrant(ratio, momentum)
-                results[symbol] = RRGPoint(
-                    symbol=symbol,
-                    name=symbol,
-                    rs_ratio=round(ratio, 2),
-                    rs_momentum=round(momentum, 2),
-                    quadrant=quad,
-                    distance_from_center=round(np.sqrt((ratio-100)**2 + (momentum-100)**2), 2),
-                    historical_trail=[(round(ratio, 2), round(momentum, 2))]
-                )
+                # Insufficient history for reliable JdK calculation: skip asset
                 continue
 
             # 1. Raw Relative Strength

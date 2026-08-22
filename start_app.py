@@ -15,6 +15,7 @@ def run_streamlit():
         'run',
         app_path,
         '--server.port', '8501',
+        '--server.address', '0.0.0.0',
         '--server.headless', 'false',
         '--browser.gatherUsageStats', 'false'
     ]

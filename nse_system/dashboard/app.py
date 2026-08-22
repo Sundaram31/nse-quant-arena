@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
 import os
 import sys
 
@@ -18,13 +19,105 @@ from nse_system.data.historical_collector import HistoricalDataCollector
 from nse_system.data.sync_scheduler import DailyDataSynchronizer
 from nse_system.data.fii_dii import FIIDIIDataProvider
 from nse_system.data.options_data import OptionsDataProvider
+from nse_system.data.partitions import DatasetStage, DatasetPartitionManager
 from nse_system.analytics.rrg import RRGAnalyzer
 from nse_system.analytics.volatility import VolatilityEngine
 from nse_system.analytics.screener import QuantStockScreener, TradingType
 from nse_system.engine.arena import StrategyBattleArena
 from nse_system.engine.backtest import BacktestEngine
 from nse_system.strategies import STRATEGY_REGISTRY, get_strategy
-from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve
+try:
+    from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve, plot_stock_strategy_chart
+except (ImportError, AttributeError):
+    from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve
+    def plot_stock_strategy_chart(
+        df: pd.DataFrame,
+        symbol: str,
+        entry_trigger: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        target_1: Optional[float] = None,
+        target_2: Optional[float] = None,
+        cpr: Optional[Any] = None,
+        strategy_name: Optional[str] = None,
+        num_bars: int = 60
+    ) -> Any:
+        import altair as alt
+        if df.empty or len(df) < 5:
+            empty_df = pd.DataFrame({'x': [100.0], 'y': [100.0], 'Message': [f'Insufficient historical candle data for {symbol}']})
+            return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(width=750, height=420)
+
+        plot_df = df.tail(num_bars).copy()
+        if 'timestamp' not in plot_df.columns:
+            plot_df['timestamp'] = plot_df.index
+
+        plot_df['ema9'] = plot_df['close'].ewm(span=9, adjust=False).mean()
+        plot_df['ema21'] = plot_df['close'].ewm(span=21, adjust=False).mean()
+        plot_df['ema50'] = plot_df['close'].ewm(span=50, adjust=False).mean()
+
+        min_p = float(plot_df['low'].min()) * 0.98
+        max_p = float(plot_df['high'].max()) * 1.02
+        if stop_loss and stop_loss > 0: min_p = min(min_p, stop_loss * 0.98)
+        if target_2 and target_2 > 0: max_p = max(max_p, target_2 * 1.02)
+
+        rule = alt.Chart(plot_df).mark_rule().encode(
+            x=alt.X('timestamp:T', title='Date', axis=alt.Axis(format='%d-%b', labelAngle=-45)),
+            y=alt.Y('low:Q', scale=alt.Scale(domain=[min_p, max_p], zero=False), title='Price (INR)'),
+            y2='high:Q',
+            color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
+            tooltip=[
+                alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
+                alt.Tooltip('open:Q', title='Open', format=',.2f'),
+                alt.Tooltip('high:Q', title='High', format=',.2f'),
+                alt.Tooltip('low:Q', title='Low', format=',.2f'),
+                alt.Tooltip('close:Q', title='Close', format=',.2f'),
+                alt.Tooltip('volume:Q', title='Volume', format=',.0f')
+            ]
+        )
+
+        bar = alt.Chart(plot_df).mark_bar(size=7).encode(
+            x='timestamp:T',
+            y='open:Q',
+            y2='close:Q',
+            color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
+            tooltip=[
+                alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
+                alt.Tooltip('open:Q', title='Open', format=',.2f'),
+                alt.Tooltip('high:Q', title='High', format=',.2f'),
+                alt.Tooltip('low:Q', title='Low', format=',.2f'),
+                alt.Tooltip('close:Q', title='Close', format=',.2f'),
+                alt.Tooltip('volume:Q', title='Volume', format=',.0f')
+            ]
+        )
+
+        layers = [rule, bar]
+        ema9 = alt.Chart(plot_df).mark_line(color='#F59E0B', strokeWidth=1.5).encode(x='timestamp:T', y='ema9:Q')
+        ema21 = alt.Chart(plot_df).mark_line(color='#3B82F6', strokeWidth=1.5).encode(x='timestamp:T', y='ema21:Q')
+        ema50 = alt.Chart(plot_df).mark_line(color='#8B5CF6', strokeWidth=1.5).encode(x='timestamp:T', y='ema50:Q')
+        layers.extend([ema9, ema21, ema50])
+
+        if cpr and hasattr(cpr, 'pivot') and cpr.pivot > 0:
+            cpr_data = pd.DataFrame({'y': [float(cpr.tc), float(cpr.pivot), float(cpr.bc)]})
+            cpr_rule = alt.Chart(cpr_data).mark_rule(strokeDash=[4, 4], color='#64748B', strokeWidth=1.2).encode(y='y:Q')
+            layers.append(cpr_rule)
+
+        levels_records = []
+        if entry_trigger and entry_trigger > 0: levels_records.append({'y': float(entry_trigger), 'color': '#2563EB'})
+        if stop_loss and stop_loss > 0: levels_records.append({'y': float(stop_loss), 'color': '#DC2626'})
+        if target_1 and target_1 > 0: levels_records.append({'y': float(target_1), 'color': '#16A34A'})
+        if target_2 and target_2 > 0: levels_records.append({'y': float(target_2), 'color': '#047857'})
+
+        for lvl in levels_records:
+            r_chart = alt.Chart(pd.DataFrame({'y': [lvl['y']]})).mark_rule(
+                strokeDash=[6, 3],
+                color=lvl['color'],
+                strokeWidth=2.0
+            ).encode(y='y:Q')
+            layers.append(r_chart)
+
+        title_text = f"{symbol} • Daily Candlesticks + EMAs (9/21/50) + CPR + Setup"
+        if strategy_name: title_text += f" [{strategy_name}]"
+        return alt.layer(*layers).properties(width=750, height=440, title=title_text).interactive()
+
 from nse_system.dashboard.components.metrics_view import render_kpi_cards, render_regime_banner, render_trade_log_table
 
 st.set_page_config(
@@ -161,19 +254,23 @@ with tab1:
     with rrg_header_col2:
         rrg_mode = st.radio("RRG Target Universe", ["Sector Indices", "Top F&O Stocks"], horizontal=True)
 
-    benchmark_df = data_provider.get_historical_dataframe("NIFTY 50", datetime.now() - timedelta(days=60), datetime.now(), "1d")
+    benchmark_df = data_provider.get_historical_dataframe("NIFTY 50", datetime.now() - timedelta(days=90), datetime.now(), "1d")
     
     if rrg_mode == "Sector Indices":
-        target_syms = get_all_sector_indices()
+        target_syms = ["BANKBEES", "ITBEES", "AUTOBEES", "PHARMABEES", "CONSUMBEES", "TATASTEEL", "DLF", "RELIANCE"]
     else:
         target_syms = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "LT", "BHARTIARTL", "ITC", "TATAMOTORS", "AXISBANK", "MARUTI", "SUNPHARMA", "TATASTEEL"]
 
     basket_data = {}
     for sym in target_syms:
-        s_df = data_provider.get_historical_dataframe(sym, datetime.now() - timedelta(days=60), datetime.now(), "1d")
-        basket_data[sym] = s_df["close"]
+        s_df = data_provider.get_historical_dataframe(sym, datetime.now() - timedelta(days=90), datetime.now(), "1d")
+        if not s_df.empty and "close" in s_df.columns and len(s_df) >= 10:
+            basket_data[sym] = s_df["close"]
 
-    rrg_results = rrg_analyzer.calculate_rrg(basket_data, benchmark_df["close"])
+    if not benchmark_df.empty and "close" in benchmark_df.columns and basket_data:
+        rrg_results = rrg_analyzer.calculate_rrg(basket_data, benchmark_df["close"])
+    else:
+        rrg_results = {}
     col_rrg, col_summary = st.columns([3, 2])
     with col_rrg:
         st.altair_chart(plot_rrg_chart(rrg_results), use_container_width=True)
@@ -197,7 +294,12 @@ with tab1:
         options_symbol_choices = list(dict.fromkeys(options_symbol_choices + UniverseManager.get_fno_symbols()[:20]))
         opt_sym = st.selectbox("Options Chain Underlyer", options_symbol_choices, index=0)
 
-    spot_p = data_provider.get_historical_dataframe(opt_sym, datetime.now() - timedelta(days=5), datetime.now(), "5m")["close"].iloc[-1]
+    df_spot = data_provider.get_historical_dataframe(opt_sym, datetime.now() - timedelta(days=365), datetime.now(), "1d")
+    if not df_spot.empty and "close" in df_spot.columns:
+        spot_p = float(df_spot["close"].iloc[-1])
+    else:
+        from nse_system.data.stock_prices import NSE_REAL_PRICES
+        spot_p = float(NSE_REAL_PRICES.get(opt_sym, 1000.0))
     chain = options_provider.get_options_chain(opt_sym, spot_p, atm_iv=vix_input)
 
     st.altair_chart(plot_options_oi(chain), use_container_width=True)
@@ -341,10 +443,26 @@ with tab2:
                 st.write(f"- **Pivot:** ₹{cpr.pivot:,.2f} | **TC:** ₹{cpr.tc:,.2f} | **BC:** ₹{cpr.bc:,.2f}")
                 st.write(f"- **R1 Resistance:** ₹{cpr.r1:,.2f} | **S1 Support:** ₹{cpr.s1:,.2f}")
 
+            # Technical Candlestick Strategy Chart
+            st.markdown("---")
+            st.markdown("#### 📈 Interactive Candlestick Chart (EMAs + CPR + Setup Blueprint)")
+            df_fav = data_provider.get_historical_dataframe(fav_stock, datetime.now() - timedelta(days=120), datetime.now(), "1d")
+            chart_fav = plot_stock_strategy_chart(
+                df=df_fav,
+                symbol=fav_stock,
+                entry_trigger=diag['entry_trigger'],
+                stop_loss=diag['stop_loss'],
+                target_1=diag['target_1'],
+                target_2=diag['target_2'],
+                cpr=diag['cpr'],
+                strategy_name=diag['recommended_setup']
+            )
+            st.altair_chart(chart_fav, use_container_width=True)
+
     # MODE 2: Today's Live Intraday Radar
     elif radar_mode == "⚡ Today's Live Intraday Radar (5m/15m)":
         st.markdown("### ⚡ Today's Live Intraday High-Conviction Setups (15:15 IST Square-off)")
-        st.write("Pops up active intraday momentum signals (**Helega Milega**, **Price-Volume Action**, and **VWAP SuperTrend**) on short timeframes.")
+        st.info("ℹ️ **Intraday Market Data:** Offline exchange datastore operates on verified daily (1d) bars. Intraday radar synthesizes today's opening range, CPR floor pivots, and momentum breakouts for active sessions.")
 
         r_col1, r_col2 = st.columns([3, 1])
         with r_col1:
@@ -374,9 +492,9 @@ with tab2:
                     "Confidence": f"{c.confidence_score:.0f}%",
                     "Entry Trigger": f"₹{c.entry_trigger:,.2f}",
                     "Stop Loss": f"₹{c.stop_loss:,.2f}",
-                    "Target 1 (1:2 R:R)": f"₹{c.target_1:,.2f}",
-                    "Target 2 (1:3 R:R)": f"₹{c.target_2:,.2f}",
-                    "Risk Management Rule": "Move SL to Breakeven at Target 1",
+                    "Target 1 (1:2 R:R)": f"₹{c.target_1:,.2f} (Same Day)",
+                    "Target 2 (1:3 R:R)": f"₹{c.target_2:,.2f} (Same Day)",
+                    "Risk Management Rule": "15:15 IST Auto-Squareoff",
                     "Catalyst / Confluence": c.catalyst_reason
                 })
             st.dataframe(pd.DataFrame(records), use_container_width=True)
@@ -406,7 +524,6 @@ with tab2:
         elif swing_dir == "🔴 Swing Short Only":
             swing_candidates = [c for c in swing_candidates if c.trading_type.value == "SWING_SHORT"]
         else:
-            # Filter strictly for Swing setups in the Swing Radar
             swing_candidates = [c for c in swing_candidates if "SWING" in c.trading_type.value]
 
         if swing_candidates:
@@ -419,6 +536,13 @@ with tab2:
                     "INTRADAY_SHORT": "⚡ INTRADAY SHORT"
                 }.get(c.trading_type.value, c.trading_type.value)
 
+                # Calculate estimated holding days based on ATR or risk distance
+                risk_span = getattr(c, 'atr', 0.0) or abs(c.entry_trigger - c.stop_loss) or (c.current_price * 0.015)
+                dist_t1 = abs(c.target_1 - c.entry_trigger)
+                dist_t2 = abs(c.target_2 - c.entry_trigger)
+                est_days_t1 = max(2, min(8, int(round(dist_t1 / max(1.0, risk_span * 0.85)))))
+                est_days_t2 = max(5, min(20, int(round(dist_t2 / max(1.0, risk_span * 0.75)))))
+
                 s_records.append({
                     "Symbol": c.symbol,
                     "Setup": badge,
@@ -426,13 +550,69 @@ with tab2:
                     "Confidence": f"{c.confidence_score:.0f}%",
                     "Entry Trigger": f"₹{c.entry_trigger:,.2f}",
                     "Stop Loss": f"₹{c.stop_loss:,.2f}",
-                    "Target 1 (1:2 R:R)": f"₹{c.target_1:,.2f}",
-                    "Target 2 (1:3 R:R)": f"₹{c.target_2:,.2f}",
+                    "Target 1 (1:2 R:R)": f"₹{c.target_1:,.2f} ({est_days_t1}–{est_days_t1+2}d)",
+                    "Target 2 (1:3 R:R)": f"₹{c.target_2:,.2f} ({est_days_t2}–{est_days_t2+4}d)",
+                    "Holding Horizon": f"{est_days_t1} to {est_days_t2} Trading Days",
                     "RRG Quadrant": c.rrg_quadrant,
                     "Derivatives OI": c.oi_buildup,
                     "Catalyst": c.catalyst_reason
                 })
             st.dataframe(pd.DataFrame(s_records), use_container_width=True)
+
+            # Interactive Drilldown for any Swing Candidate
+            st.markdown("---")
+            st.markdown("#### 🔍 Detailed Candlestick Chart & News Diagnosis for Screened Stocks")
+            st.write("Pick any stock from the table above to inspect its **Candlestick Chart (EMAs + CPR + Target/SL levels)** and **Live News Headlines**:")
+            
+            sw_syms = [c.symbol for c in swing_candidates]
+            chosen_sw_stock = st.selectbox("Select Stock to View Setup Chart & Catalysts:", sw_syms, index=0, key="sw_drilldown_stock_picker")
+            if chosen_sw_stock:
+                cand_obj = next((c for c in swing_candidates if c.symbol == chosen_sw_stock), None)
+                diag_obj = screener.diagnose_single_stock(chosen_sw_stock)
+                sent_obj = diag_obj["sentiment_report"]
+
+                d_col_v, d_col_info = st.columns([3, 2])
+                verdict_color = "#10B981" if "BULLISH" in diag_obj["verdict"] else ("#EF4444" if "BEARISH" in diag_obj["verdict"] else "#3B82F6")
+                with d_col_v:
+                    st.markdown(f"""
+                    <div class="diag-card" style="border-left: 6px solid {verdict_color}; margin-bottom: 0.5rem;">
+                        <h4 style="margin:0; color:#0F172A;">📊 {diag_obj['symbol']} &nbsp;•&nbsp; ₹{diag_obj['current_price']:,.2f} ({diag_obj['change_pct']:+.2f}%)</h4>
+                        <p style="margin:0.3rem 0; color:{verdict_color};"><b>Quant Stance:</b> {diag_obj['verdict']} &nbsp;|&nbsp; <b>Confidence:</b> {diag_obj['confidence_score']:.0f}% &nbsp;|&nbsp; <b>Sentiment:</b> {sent_obj.overall_sentiment}</p>
+                        <p style="margin:0; color:#475569;"><b>Strategy:</b> {cand_obj.matched_strategy if cand_obj else diag_obj['recommended_setup']} &nbsp;|&nbsp; <b>RRG:</b> {diag_obj['rrg_quadrant']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with d_col_info:
+                    st.markdown(f"""
+                    <div class="diag-card" style="margin-bottom: 0.5rem;">
+                        <p style="margin:0;"><b>Target 1:</b> ₹{cand_obj.target_1:,.2f} &nbsp;|&nbsp; <b>Target 2:</b> ₹{cand_obj.target_2:,.2f}</p>
+                        <p style="margin:0.2rem 0;"><b>Stop Loss:</b> ₹{cand_obj.stop_loss:,.2f} &nbsp;|&nbsp; <b>Next Earnings:</b> {sent_obj.upcoming_earnings_date or 'No immediate announcement'}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Candlestick chart
+                df_sw_c = data_provider.get_historical_dataframe(chosen_sw_stock, datetime.now() - timedelta(days=120), datetime.now(), "1d")
+                st_chart = plot_stock_strategy_chart(
+                    df=df_sw_c,
+                    symbol=chosen_sw_stock,
+                    entry_trigger=cand_obj.entry_trigger if cand_obj else diag_obj['entry_trigger'],
+                    stop_loss=cand_obj.stop_loss if cand_obj else diag_obj['stop_loss'],
+                    target_1=cand_obj.target_1 if cand_obj else diag_obj['target_1'],
+                    target_2=cand_obj.target_2 if cand_obj else diag_obj['target_2'],
+                    cpr=diag_obj['cpr'],
+                    strategy_name=cand_obj.matched_strategy if cand_obj else diag_obj['recommended_setup']
+                )
+                st.altair_chart(st_chart, use_container_width=True)
+
+                # News Headlines
+                if sent_obj.news_items:
+                    st.markdown("**Company News & Media Catalysts:**")
+                    for n in sent_obj.news_items:
+                        st.markdown(f"""
+                        <div class="news-card">
+                            <b>{n.sentiment} &nbsp; {n.headline}</b><br>
+                            <span style="color:#64748B; font-size:0.85rem;">Source: {n.source} • {n.published_at} • Tag: {n.category}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
     # MODE 4: Custom Watchlist Scanner
     else:
@@ -442,15 +622,24 @@ with tab2:
             "My Watchlist Tickers",
             value="MCX, ADANIGREEN, AARTIIND, TATAMOTORS, RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK, SBIN, ITC, LT, ZOMATO"
         )
-        if st.button("⚡ Scan My Watchlist Now", type="primary"):
+        if st.button("⚡ Scan My Watchlist Now", type="primary") or "watchlist_cached" in st.session_state:
             user_syms = [s.strip().upper() for s in watchlist_input.split(",") if s.strip()]
-            with st.spinner(f"Scanning {len(user_syms)} custom stocks..."):
-                cands = screener.scan_custom_symbols(user_syms, min_confidence=0.0)
+            if st.session_state.get("watchlist_last_syms") != user_syms or "watchlist_cached" not in st.session_state:
+                with st.spinner(f"Scanning {len(user_syms)} custom stocks..."):
+                    st.session_state["watchlist_cached"] = screener.scan_custom_symbols(user_syms, min_confidence=0.0)
+                    st.session_state["watchlist_last_syms"] = user_syms
 
+            cands = st.session_state.get("watchlist_cached", [])
             if cands:
                 records = []
                 for c in cands:
                     badge_type = "🟢 SWING LONG" if "LONG" in c.trading_type.value else ("🔴 SWING SHORT" if "SHORT" in c.trading_type.value else "⚪ NEUTRAL")
+                    risk_span = getattr(c, 'atr', 0.0) or abs(c.entry_trigger - c.stop_loss) or (c.current_price * 0.015)
+                    dist_t1 = abs(c.target_1 - c.entry_trigger)
+                    dist_t2 = abs(c.target_2 - c.entry_trigger)
+                    est_days_t1 = max(2, min(8, int(round(dist_t1 / max(1.0, risk_span * 0.85)))))
+                    est_days_t2 = max(5, min(20, int(round(dist_t2 / max(1.0, risk_span * 0.75)))))
+
                     records.append({
                         "Symbol": c.symbol,
                         "Setup Recommendation": badge_type,
@@ -458,13 +647,65 @@ with tab2:
                         "Current Price": f"₹{c.current_price:,.2f}",
                         "Entry Trigger": f"₹{c.entry_trigger:,.2f}",
                         "Stop Loss": f"₹{c.stop_loss:,.2f}",
-                        "Target 1 (1:2)": f"₹{c.target_1:,.2f}",
-                        "Target 2 (1:3)": f"₹{c.target_2:,.2f}",
+                        "Target 1 (1:2)": f"₹{c.target_1:,.2f} ({est_days_t1}–{est_days_t1+2}d)",
+                        "Target 2 (1:3)": f"₹{c.target_2:,.2f} ({est_days_t2}–{est_days_t2+4}d)",
+                        "Holding Horizon": f"{est_days_t1} to {est_days_t2} Days",
                         "RRG Quadrant": c.rrg_quadrant,
                         "Derivatives OI": c.oi_buildup,
                         "Technical Reason": c.catalyst_reason
                     })
                 st.dataframe(pd.DataFrame(records), use_container_width=True)
+
+                # Interactive Drilldown for Watchlist Stock
+                st.markdown("---")
+                st.markdown("#### 🔍 Detailed Watchlist Stock Chart & Diagnosis")
+                w_syms = [c.symbol for c in cands]
+                chosen_w_stock = st.selectbox("Select Watchlist Stock to Inspect:", w_syms, index=0, key="w_drilldown_picker")
+                if chosen_w_stock:
+                    w_cand = next((c for c in cands if c.symbol == chosen_w_stock), None)
+                    w_diag = screener.diagnose_single_stock(chosen_w_stock)
+                    w_sent = w_diag["sentiment_report"]
+
+                    w_col1, w_col2 = st.columns([3, 2])
+                    w_v_col = "#10B981" if "BULLISH" in w_diag["verdict"] else ("#EF4444" if "BEARISH" in w_diag["verdict"] else "#3B82F6")
+                    with w_col1:
+                        st.markdown(f"""
+                        <div class="diag-card" style="border-left: 6px solid {w_v_col}; margin-bottom:0.5rem;">
+                            <h4 style="margin:0; color:#0F172A;">📊 {w_diag['symbol']} &nbsp;•&nbsp; ₹{w_diag['current_price']:,.2f} ({w_diag['change_pct']:+.2f}%)</h4>
+                            <p style="margin:0.2rem 0; color:{w_v_col};"><b>Stance:</b> {w_diag['verdict']} &nbsp;|&nbsp; <b>News Sentiment:</b> {w_sent.overall_sentiment}</p>
+                            <p style="margin:0; color:#475569;"><b>Setup:</b> {w_cand.matched_strategy if w_cand else w_diag['recommended_setup']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with w_col2:
+                        st.markdown(f"""
+                        <div class="diag-card" style="margin-bottom:0.5rem;">
+                            <p style="margin:0;"><b>Entry:</b> ₹{w_diag['entry_trigger']:,.2f} &nbsp;|&nbsp; <b>Stop Loss:</b> ₹{w_diag['stop_loss']:,.2f}</p>
+                            <p style="margin:0.2rem 0;"><b>Target 1:</b> ₹{w_diag['target_1']:,.2f} &nbsp;|&nbsp; <b>Target 2:</b> ₹{w_diag['target_2']:,.2f}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    df_w = data_provider.get_historical_dataframe(chosen_w_stock, datetime.now() - timedelta(days=120), datetime.now(), "1d")
+                    w_chart = plot_stock_strategy_chart(
+                        df=df_w,
+                        symbol=chosen_w_stock,
+                        entry_trigger=w_diag['entry_trigger'],
+                        stop_loss=w_diag['stop_loss'],
+                        target_1=w_diag['target_1'],
+                        target_2=w_diag['target_2'],
+                        cpr=w_diag['cpr'],
+                        strategy_name=w_diag['recommended_setup']
+                    )
+                    st.altair_chart(w_chart, use_container_width=True)
+
+                    if w_sent.news_items:
+                        st.markdown("**Company News & Media Catalysts:**")
+                        for n in w_sent.news_items:
+                            st.markdown(f"""
+                            <div class="news-card">
+                                <b>{n.sentiment} &nbsp; {n.headline}</b><br>
+                                <span style="color:#64748B; font-size:0.85rem;">Source: {n.source} • {n.published_at} • Tag: {n.category}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
 
 # TAB 3: Strategy Battle Arena
 with tab3:
@@ -509,14 +750,56 @@ with tab3:
 # TAB 4: Deep Strategy Backtester
 with tab4:
     st.subheader("📊 Deep-Dive Strategy Backtest & Execution Report")
-    selected_strat_name = st.selectbox("Choose Strategy to Test", list(STRATEGY_REGISTRY.keys()), index=0)
+    b_col1, b_col2 = st.columns([2, 3])
+    with b_col1:
+        selected_strat_name = st.selectbox("Choose Strategy to Test", list(STRATEGY_REGISTRY.keys()), index=0)
+    with b_col2:
+        stage_name = st.selectbox(
+            "Quantitative Walk-Forward Partition",
+            [
+                "🛡️ Stage 3: Out-of-Sample Final Verification (Last 2 Months)",
+                "🔬 Stage 2: Model Refinement & Tuning (Jul 2025 - Jun 2026)",
+                "🧪 Stage 1: Strategy Training & Backtest (Aug 2021 - Jun 2025)",
+                "📈 Full 5-Year Master Horizon (Aug 2021 - Aug 2026)"
+            ],
+            index=0
+        )
     
-    candles = data_provider.get_historical_candles(
-        selected_symbol,
-        datetime.now() - timedelta(days=lookback_days),
-        datetime.now(),
-        timeframe
-    )
+    stage_map = {
+        "🧪 Stage 1: Strategy Training & Backtest (Aug 2021 - Jun 2025)": DatasetStage.TRAIN_BACKTEST,
+        "🔬 Stage 2: Model Refinement & Tuning (Jul 2025 - Jun 2026)": DatasetStage.VALIDATION_REFINE,
+        "🛡️ Stage 3: Out-of-Sample Final Verification (Last 2 Months)": DatasetStage.OUT_OF_SAMPLE_VERIFY,
+        "📈 Full 5-Year Master Horizon (Aug 2021 - Aug 2026)": DatasetStage.FULL_SERIES
+    }
+    selected_stage = stage_map[stage_name]
+
+    # Load verified DataFrame for selected symbol and slice to stage
+    df_all = data_provider.get_historical_dataframe(selected_symbol, datetime(2021, 1, 1), datetime(2026, 12, 31), timeframe='1d')
+    df_sliced = DatasetPartitionManager.slice_dataframe_by_stage(df_all, selected_stage)
+
+    if not df_sliced.empty:
+        st.caption(f"📅 **Active Partition Window:** {df_sliced.index.min().strftime('%d-%b-%Y')} to {df_sliced.index.max().strftime('%d-%b-%Y')} ({len(df_sliced)} Trading Sessions) • 100% Genuine Exchange Data")
+        from nse_system.core.models import Candle
+        candles = [
+            Candle(
+                timestamp=row.Index.to_pydatetime() if isinstance(row.Index, pd.Timestamp) else row.Index,
+                open=float(row.open),
+                high=float(row.high),
+                low=float(row.low),
+                close=float(row.close),
+                volume=float(row.volume),
+                oi=float(getattr(row, 'oi', 0.0)),
+                vwap=float(getattr(row, 'vwap', row.close))
+            )
+            for row in df_sliced.itertuples()
+        ]
+    else:
+        candles = data_provider.get_historical_candles(
+            selected_symbol,
+            datetime.now() - timedelta(days=lookback_days),
+            datetime.now(),
+            timeframe
+        )
     
     strat_obj = get_strategy(selected_strat_name, symbol=selected_symbol, timeframe=timeframe)
     bt_engine = BacktestEngine(strategy=strat_obj, initial_capital=capital)
