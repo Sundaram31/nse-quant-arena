@@ -29,13 +29,24 @@ from nse_system.broker.paper_broker import PaperBroker
 from nse_system.engine.paper import PaperTradingEngine
 from nse_system.core.constants import OrderSide, OrderType, ProductType, OrderStatus
 from nse_system.strategies import STRATEGY_REGISTRY, get_strategy
-from nse_system.dashboard.components.charts import (
-    plot_rrg_chart,
-    plot_options_oi,
-    plot_equity_curve,
-    plot_stock_strategy_chart,
-    plot_backtest_trades_chart
-)
+try:
+    from nse_system.dashboard.components.charts import (
+        plot_rrg_chart,
+        plot_options_oi,
+        plot_equity_curve,
+        plot_stock_strategy_chart,
+        plot_backtest_trades_chart
+    )
+except (ImportError, AttributeError):
+    from nse_system.dashboard.components.charts import (
+        plot_rrg_chart,
+        plot_options_oi,
+        plot_equity_curve,
+        plot_stock_strategy_chart
+    )
+    def plot_backtest_trades_chart(df, trades, symbol, strategy_name, theme="auto"):
+        return plot_stock_strategy_chart(df=df, symbol=symbol, strategy_name=strategy_name, theme=theme)
+
 from nse_system.dashboard.components.metrics_view import render_kpi_cards, render_regime_banner, render_trade_log_table
 
 st.set_page_config(
