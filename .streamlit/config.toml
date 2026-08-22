@@ -1,7 +1,3 @@
-[theme]
-primaryColor = "#10B981"
-font = "sans serif"
-
 [server]
 headless = true
 enableCORS = false
