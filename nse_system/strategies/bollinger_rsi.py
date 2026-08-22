@@ -60,7 +60,9 @@ class BollingerRSIStrategy(BaseStrategy):
         lower_band = mid_band - (self.params['bb_std'] * std_val)
         pct_b = (cur_close - lower_band) / max(1e-6, upper_band - lower_band)
 
-        if c_time >= time(15, 15):
+        is_daily = 'd' in str(self.timeframe).lower()
+
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='15:15 Intraday Square-Off')
             return None
@@ -79,7 +81,7 @@ class BollingerRSIStrategy(BaseStrategy):
                 return self.exit_signal(candle, reason='Mean Reversion Target (20 SMA) Reached')
 
         # Entry logic
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 15):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 15))):
             if (pct_b < 0.05 or candle.low <= lower_band) and self.rsi_val <= self.params['rsi_oversold']:
                 sl = candle.low * 0.994
                 tgt = mid_band

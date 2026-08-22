@@ -60,7 +60,9 @@ class RRGSectorMomentumStrategy(BaseStrategy):
         if len(self.candles) < 21:
             return None
 
-        if c_time >= time(15, 15):
+        is_daily = 'd' in str(self.timeframe).lower()
+
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='15:15 Intraday Square-Off')
             return None
@@ -78,7 +80,7 @@ class RRGSectorMomentumStrategy(BaseStrategy):
             if self.target and candle.low <= self.target:
                 return self.exit_signal(candle, reason='RRG Short Target Hit')
 
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 0):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 0))):
             if self.params.get('is_leading_sector', True):
                 if self.fast_ema > self.slow_ema and self.rsi_val > 55:
                     sl = candle.close * (1 - self.params['sl_pct'])

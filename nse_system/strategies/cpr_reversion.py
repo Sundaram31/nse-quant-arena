@@ -50,8 +50,10 @@ class CPRReversionStrategy(BaseStrategy):
         if not self.cpr_levels:
             return None
 
-        # 15:15 IST Square-off
-        if c_time >= time(15, 15):
+        is_daily = 'd' in str(self.timeframe).lower()
+
+        # 15:15 IST Square-off (Intraday only)
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='15:15 Intraday Square-Off')
             return None
@@ -70,7 +72,7 @@ class CPRReversionStrategy(BaseStrategy):
                 return self.exit_signal(candle, reason='CPR Short Target Hit')
 
         # Entry logic
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 0):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 0))):
             cpr = self.cpr_levels
             thresh = candle.close * self.params['bounce_threshold_pct']
 

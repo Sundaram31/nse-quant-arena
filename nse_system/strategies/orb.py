@@ -37,27 +37,38 @@ class ORBStrategy(BaseStrategy):
             self.orb_complete = False
             self.traded_today = False
 
-        # Form Opening Range (09:15 to 09:30 for 15m ORB)
-        orb_end_minute = 15 + self.params['orb_minutes']
-        orb_end_hour = 9 + (orb_end_minute // 60)
-        orb_end_min = orb_end_minute % 60
-        orb_cutoff = time(orb_end_hour, orb_end_min)
+        is_daily = 'd' in str(self.timeframe).lower()
 
-        if c_time <= orb_cutoff:
-            if self.orb_high is None or candle.high > self.orb_high:
-                self.orb_high = candle.high
-            if self.orb_low is None or candle.low < self.orb_low:
-                self.orb_low = candle.low
-            return None
+        if is_daily:
+            if len(self.candles) < 5:
+                return None
+            prev_high = max(c.high for c in self.candles[-6:-1])
+            prev_low = min(c.low for c in self.candles[-6:-1])
+            self.orb_high = prev_high
+            self.orb_low = prev_low
+            self.orb_complete = True
+        else:
+            # Form Opening Range (09:15 to 09:30 for 15m ORB)
+            orb_end_minute = 15 + self.params['orb_minutes']
+            orb_end_hour = 9 + (orb_end_minute // 60)
+            orb_end_min = orb_end_minute % 60
+            orb_cutoff = time(orb_end_hour, orb_end_min)
 
-        # Range is formed
-        self.orb_complete = True
+            if c_time <= orb_cutoff:
+                if self.orb_high is None or candle.high > self.orb_high:
+                    self.orb_high = candle.high
+                if self.orb_low is None or candle.low < self.orb_low:
+                    self.orb_low = candle.low
+                return None
 
-        # Intraday Square-off after 15:15 IST
-        if c_time >= time(15, 15):
-            if self.current_position != 0:
-                return self.exit_signal(candle, reason='Intraday 15:15 Auto Square-Off')
-            return None
+            # Range is formed
+            self.orb_complete = True
+
+            # Intraday Square-off after 15:15 IST
+            if c_time >= time(15, 15):
+                if self.current_position != 0:
+                    return self.exit_signal(candle, reason='Intraday 15:15 Auto Square-Off')
+                return None
 
         # Check Position Exits (Target / Stop-Loss)
         if self.current_position > 0:
@@ -72,8 +83,8 @@ class ORBStrategy(BaseStrategy):
             if self.target and candle.low <= self.target:
                 return self.exit_signal(candle, reason='ORB Short Target Hit')
 
-        # Check for Breakout Entries (Only 1 trade per day for discipline)
-        if not self.traded_today and self.current_position == 0 and c_time < time(14, 0):
+        # Check for Breakout Entries
+        if not self.traded_today and self.current_position == 0 and (is_daily or c_time < time(14, 0)):
             orb_range = self.orb_high - self.orb_low
             
             # Bullish Breakout above ORB High

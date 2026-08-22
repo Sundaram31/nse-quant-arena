@@ -22,8 +22,10 @@ class OIMomentumStrategy(BaseStrategy):
         if len(self.candles) < 5:
             return None
 
+        is_daily = 'd' in str(self.timeframe).lower()
         c_time = candle.timestamp.time()
-        if c_time >= time(15, 15):
+
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='15:15 Intraday Square-Off')
             return None
@@ -46,7 +48,7 @@ class OIMomentumStrategy(BaseStrategy):
         oi_change = (candle.oi - prev_candle.oi) / max(1.0, prev_candle.oi)
         price_change = (candle.close - prev_candle.close) / max(1.0, prev_candle.close)
 
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 0):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 0))):
             # Institutional Long Buildup: Price UP > 0.3% with OI UP > 3%
             if price_change > 0.003 and oi_change > self.params['oi_increase_threshold_pct']:
                 sl = candle.close * (1 - self.params['sl_pct'])

@@ -450,3 +450,129 @@ def plot_equity_curve(equity_history: List[Dict[str, Any]], theme: str = "dark")
         hovermode="x unified"
     )
     return fig
+
+
+def plot_backtest_trades_chart(
+    df: pd.DataFrame,
+    trades: List[Trade],
+    symbol: str,
+    strategy_name: str,
+    theme: str = "auto"
+) -> go.Figure:
+    """Generates an interactive candlestick chart overlaying exact BUY and EXIT trade points with annotations."""
+    c = _get_theme_colors(theme)
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.75, 0.25],
+        subplot_titles=[f"<b>{symbol}</b> Price Action & Backtest Trade Markers ({strategy_name})", "Volume"]
+    )
+
+    if df.empty:
+        fig.add_annotation(text="No historical candle data available", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    # 1. Candlestick trace
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index,
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name=f"{symbol} Price",
+            increasing_line_color=c["up_color"],
+            decreasing_line_color=c["down_color"],
+            increasing_fillcolor=c["up_color"],
+            decreasing_fillcolor=c["down_color"]
+        ),
+        row=1, col=1
+    )
+
+    # 2. EMAs
+    if len(df) >= 21:
+        e9 = df['close'].ewm(span=9, adjust=False).mean()
+        e21 = df['close'].ewm(span=21, adjust=False).mean()
+        fig.add_trace(go.Scatter(x=df.index, y=e9, mode='lines', line=dict(color=c["ema9"], width=1.5), name="9 EMA"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=e21, mode='lines', line=dict(color=c["ema21"], width=1.5), name="21 EMA"), row=1, col=1)
+
+    # 3. Trade Entry & Exit Markers
+    buy_times, buy_prices, buy_texts = [], [], []
+    exit_times, exit_prices, exit_texts = [], [], []
+
+    for t in trades:
+        if t.entry_time:
+            buy_times.append(t.entry_time)
+            buy_prices.append(t.entry_price)
+            buy_texts.append(f"🟢 <b>BUY ENTRY</b><br>Date: {t.entry_time.strftime('%d-%b-%Y') if hasattr(t.entry_time, 'strftime') else t.entry_time}<br>Price: ₹{t.entry_price:,.2f}<br>Qty: {t.quantity}")
+
+        if t.exit_time:
+            exit_times.append(t.exit_time)
+            exit_prices.append(t.exit_price)
+            res_emoji = "🟢 WIN" if t.net_pnl > 0 else "🔴 LOSS"
+            exit_texts.append(f"🔴 <b>EXIT ({res_emoji})</b><br>Date: {t.exit_time.strftime('%d-%b-%Y') if hasattr(t.exit_time, 'strftime') else t.exit_time}<br>Price: ₹{t.exit_price:,.2f}<br>Return: {t.return_pct:+.2f}%<br>Net PnL: ₹{t.net_pnl:+,.2f}<br>Reason: {t.exit_reason}")
+
+    if buy_times:
+        fig.add_trace(
+            go.Scatter(
+                x=buy_times,
+                y=buy_prices,
+                mode="markers",
+                marker=dict(symbol="triangle-up", size=13, color="#10B981", line=dict(color="#FFFFFF", width=1.5)),
+                name="🟢 Buy Entry",
+                text=buy_texts,
+                hoverinfo="text"
+            ),
+            row=1, col=1
+        )
+
+    if exit_times:
+        fig.add_trace(
+            go.Scatter(
+                x=exit_times,
+                y=exit_prices,
+                mode="markers",
+                marker=dict(symbol="triangle-down", size=13, color="#EF4444", line=dict(color="#FFFFFF", width=1.5)),
+                name="🔴 Trade Exit",
+                text=exit_texts,
+                hoverinfo="text"
+            ),
+            row=1, col=1
+        )
+
+    # 4. Volume Bars
+    if 'volume' in df.columns:
+        vol_colors = [c["up_color"] if o <= cl else c["down_color"] for o, cl in zip(df['open'], df['close'])]
+        fig.add_trace(
+            go.Bar(x=df.index, y=df['volume'], marker_color=vol_colors, name="Volume", opacity=0.7),
+            row=2, col=1
+        )
+
+    fig.update_layout(
+        template="plotly_dark" if theme == "dark" else "plotly_white",
+        paper_bgcolor=c["paper_bg"],
+        plot_bgcolor=c["bg"],
+        font=dict(color=c["text"], family="Inter, system-ui"),
+        height=520,
+        margin=dict(l=20, r=20, t=40, b=20),
+        xaxis=dict(rangeslider=dict(visible=False), gridcolor=c["grid"]),
+        xaxis2=dict(
+            gridcolor=c["grid"],
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=1, label="1M", step="month", stepmode="backward"),
+                    dict(count=3, label="3M", step="month", stepmode="backward"),
+                    dict(count=6, label="6M", step="month", stepmode="backward"),
+                    dict(count=1, label="1Y", step="year", stepmode="backward"),
+                    dict(step="all", label="ALL")
+                ]),
+                font=dict(size=10, color=c["text"]),
+                bgcolor=c["border"]
+            )
+        ),
+        yaxis=dict(title="Price (INR)", gridcolor=c["grid"]),
+        yaxis2=dict(title="Volume", gridcolor=c["grid"]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    return fig

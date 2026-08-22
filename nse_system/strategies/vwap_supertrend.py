@@ -92,8 +92,10 @@ class VWAPSuperTrendStrategy(BaseStrategy):
         if len(self.candles) < self.params['st_period']:
             return None
 
-        # Mandatory 15:15 IST Square-off
-        if c_time >= time(15, 15):
+        is_daily = 'd' in str(self.timeframe).lower()
+
+        # Mandatory 15:15 IST Square-off (Intraday only)
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='Intraday 15:15 Square-Off')
             return None
@@ -131,7 +133,7 @@ class VWAPSuperTrendStrategy(BaseStrategy):
                 return self.exit_signal(candle, reason='SuperTrend flipped Bullish')
 
         # Check Entry Conditions
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 30):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 30))):
             if cur_close > cur_vwap and self.st_dir == 1:
                 sl = cur_close - (self.params['atr_multiplier_sl'] * cur_atr)
                 risk = cur_close - sl

@@ -108,6 +108,7 @@ class BacktestEngine:
                         side=OrderSide.SELL if current_side == OrderSide.BUY else OrderSide.BUY,
                         order_type=OrderType.MARKET,
                         quantity=current_qty,
+                        filled_quantity=current_qty,
                         avg_price=exit_price
                     )
                     self.strategy.on_order_update(exit_order)

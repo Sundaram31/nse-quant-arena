@@ -79,7 +79,9 @@ class MultiEMACrossoverStrategy(BaseStrategy):
         if len(self.candles) < self.params['slow_ema']:
             return None
 
-        if c_time >= time(15, 15):
+        is_daily = 'd' in str(self.timeframe).lower()
+
+        if not is_daily and c_time >= time(15, 15):
             if self.current_position != 0:
                 return self.exit_signal(candle, reason='15:15 Intraday Square-Off')
             return None
@@ -109,7 +111,7 @@ class MultiEMACrossoverStrategy(BaseStrategy):
                 return self.exit_signal(candle, reason='Fast EMA Crossed Above Slow EMA')
 
         # Entry logic
-        if self.current_position == 0 and time(9, 30) <= c_time <= time(14, 30):
+        if self.current_position == 0 and (is_daily or (time(9, 30) <= c_time <= time(14, 30))):
             if f_cur > s_cur and f_prev <= s_prev and cur_close > t_cur and r_cur >= self.params['rsi_bull_min']:
                 sl = cur_close - (self.params['atr_sl_mult'] * self.atr_val)
                 risk = cur_close - sl

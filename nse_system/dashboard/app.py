@@ -33,7 +33,8 @@ from nse_system.dashboard.components.charts import (
     plot_rrg_chart,
     plot_options_oi,
     plot_equity_curve,
-    plot_stock_strategy_chart
+    plot_stock_strategy_chart,
+    plot_backtest_trades_chart
 )
 from nse_system.dashboard.components.metrics_view import render_kpi_cards, render_regime_banner, render_trade_log_table
 
@@ -784,36 +785,88 @@ with tab3:
 
 # TAB 4: Deep Strategy Backtester
 with tab4:
-    st.subheader("📊 Deep-Dive Strategy Backtest & Execution Report")
-    b_col1, b_col2 = st.columns([2, 3])
-    with b_col1:
-        selected_strat_name = st.selectbox("Choose Strategy to Test", list(STRATEGY_REGISTRY.keys()), index=0)
-    with b_col2:
-        stage_name = st.selectbox(
-            "Quantitative Walk-Forward Partition",
-            [
-                "🛡️ Stage 3: Out-of-Sample Final Verification (Last 2 Months)",
-                "🔬 Stage 2: Model Refinement & Tuning (Jul 2025 - Jun 2026)",
-                "🧪 Stage 1: Strategy Training & Backtest (Aug 2021 - Jun 2025)",
-                "📈 Full 5-Year Master Horizon (Aug 2021 - Aug 2026)"
-            ],
-            index=0
+    st.subheader("📊 Deep-Dive Strategy Backtester & Trade Visualizer")
+    st.markdown("""
+    <div style="background: rgba(59, 130, 246, 0.08); border-left: 4px solid #3B82F6; padding: 12px 16px; border-radius: 6px; margin-bottom: 1rem;">
+        <b>🎯 How to use this Backtester:</b><br>
+        1. <b>Select a Stock & Strategy</b> below.<br>
+        2. Instantly see the <b>Candlestick Chart with Green Buy (▲) & Red Sell (▼) trade markers</b>.<br>
+        3. Check your <b>Real Net Profit</b> (after SEBI, STT & NSE exchange charges) and review the complete trade-by-trade diary!
+    </div>
+    """, unsafe_allow_html=True)
+
+    fno_universe = UniverseManager.get_fno_symbols()
+    default_stock_index = fno_universe.index(selected_symbol) if selected_symbol in fno_universe else 0
+
+    c_b1, c_b2, c_b3 = st.columns([1.5, 2.2, 1.8])
+    with c_b1:
+        tab4_symbol = st.selectbox(
+            "📌 Step 1: Select Stock",
+            fno_universe,
+            index=default_stock_index,
+            key="tab4_stock_selector"
         )
-    
+    with c_b2:
+        strat_display_names = {
+            "VWAP_SuperTrend": "⚡ VWAP + SuperTrend (Trend Rider)",
+            "RRG_Sector_Momentum": "🌐 RRG Sector Momentum (Sector Leader)",
+            "EMA_Crossover": "📈 9/21 Multi-EMA Crossover + RSI",
+            "Price_Volume_Action": "📊 Price-Volume Action Breakout (PVA)",
+            "CPR_Reversion": "🔄 CPR Support/Resistance Mean Reversion",
+            "Bollinger_RSI": "🎯 Bollinger Band + RSI Oversold Bounce",
+            "ORB": "💥 Opening Range Breakout (ORB)",
+            "Helega_Milega": "🚀 Helega Milega (RSI Smoothed Momentum)",
+            "OI_Momentum": "🏦 Institutional Open Interest Buildup"
+        }
+        strat_options = list(STRATEGY_REGISTRY.keys())
+        selected_strat_key = st.selectbox(
+            "⚙️ Step 2: Choose Quantitative Strategy",
+            strat_options,
+            format_func=lambda k: strat_display_names.get(k, k),
+            index=0,
+            key="tab4_strat_selector"
+        )
+    with c_b3:
+        stage_name = st.selectbox(
+            "📅 Step 3: Testing Horizon",
+            [
+                "📈 Full 5-Year Horizon (Aug 2021 - Aug 2026) — Recommended",
+                "🔬 1-Year Recent Window (Jul 2025 - Jun 2026)",
+                "🧪 Stage 1: Strategy Training (Aug 2021 - Jun 2025)",
+                "🛡️ Stage 3: Out-of-Sample Verification (Last 2 Months)"
+            ],
+            index=0,
+            key="tab4_horizon_selector"
+        )
+
+    # Strategy Explanation Card
+    strat_explanations = {
+        "VWAP_SuperTrend": "Enters long when price breaks above VWAP with SuperTrend green confirmation; trails stop-loss dynamically using ATR.",
+        "RRG_Sector_Momentum": "Enters stocks in leading/improving market sectors with 9 EMA > 21 EMA and RSI > 55.",
+        "EMA_Crossover": "Enters when the fast 9 EMA crosses above the 21 EMA above the 200 EMA long-term trendline with RSI confirmation.",
+        "Price_Volume_Action": "Captures institutional volume surges breaking out of 20-day price consolidation ranges.",
+        "CPR_Reversion": "Trades high-probability bounces off Central Pivot Range (CPR) support/resistance bands.",
+        "Bollinger_RSI": "Buys oversold mean-reversion pullbacks at lower Bollinger Bands with RSI < 35.",
+        "ORB": "Enters directional momentum breakouts above multi-day highs with predefined risk brackets.",
+        "Helega_Milega": "Combines smoothed 9/21 RSI momentum curves with volume confirmation for Indian equity swings.",
+        "OI_Momentum": "Tracks institutional futures & options buildup where rising volume and open interest confirm price continuation."
+    }
+    st.info(f"💡 **Strategy Logic:** {strat_explanations.get(selected_strat_key, '')}")
+
     stage_map = {
-        "🧪 Stage 1: Strategy Training & Backtest (Aug 2021 - Jun 2025)": DatasetStage.TRAIN_BACKTEST,
-        "🔬 Stage 2: Model Refinement & Tuning (Jul 2025 - Jun 2026)": DatasetStage.VALIDATION_REFINE,
-        "🛡️ Stage 3: Out-of-Sample Final Verification (Last 2 Months)": DatasetStage.OUT_OF_SAMPLE_VERIFY,
-        "📈 Full 5-Year Master Horizon (Aug 2021 - Aug 2026)": DatasetStage.FULL_SERIES
+        "📈 Full 5-Year Horizon (Aug 2021 - Aug 2026) — Recommended": DatasetStage.FULL_SERIES,
+        "🔬 1-Year Recent Window (Jul 2025 - Jun 2026)": DatasetStage.VALIDATION_REFINE,
+        "🧪 Stage 1: Strategy Training (Aug 2021 - Jun 2025)": DatasetStage.TRAIN_BACKTEST,
+        "🛡️ Stage 3: Out-of-Sample Verification (Last 2 Months)": DatasetStage.OUT_OF_SAMPLE_VERIFY
     }
     selected_stage = stage_map[stage_name]
 
     # Load verified DataFrame for selected symbol and slice to stage
-    df_all = data_provider.get_historical_dataframe(selected_symbol, datetime(2021, 1, 1), datetime(2026, 12, 31), timeframe='1d')
+    df_all = data_provider.get_historical_dataframe(tab4_symbol, datetime(2021, 1, 1), datetime(2026, 12, 31), timeframe='1d')
     df_sliced = DatasetPartitionManager.slice_dataframe_by_stage(df_all, selected_stage)
 
     if not df_sliced.empty:
-        st.caption(f"📅 **Active Partition Window:** {df_sliced.index.min().strftime('%d-%b-%Y')} to {df_sliced.index.max().strftime('%d-%b-%Y')} ({len(df_sliced)} Trading Sessions) • 100% Genuine Exchange Data")
+        st.caption(f"📅 **Backtest Window:** {df_sliced.index.min().strftime('%d-%b-%Y')} to {df_sliced.index.max().strftime('%d-%b-%Y')} ({len(df_sliced)} Trading Days) • 100% Genuine Exchange Data")
         from nse_system.core.models import Candle
         candles = [
             Candle(
@@ -830,23 +883,40 @@ with tab4:
         ]
     else:
         candles = data_provider.get_historical_candles(
-            selected_symbol,
+            tab4_symbol,
             datetime.now() - timedelta(days=lookback_days),
             datetime.now(),
-            timeframe
+            '1d'
         )
-    
-    strat_obj = get_strategy(selected_strat_name, symbol=selected_symbol, timeframe=timeframe)
+
+    strat_obj = get_strategy(selected_strat_key, symbol=tab4_symbol, timeframe='1d')
     bt_engine = BacktestEngine(strategy=strat_obj, initial_capital=capital)
     single_perf = bt_engine.run(candles)
 
+    # 1. Performance KPI Cards
     render_kpi_cards(single_perf)
+
+    # 2. Candlestick Visualizer with BUY/SELL Markers
+    st.plotly_chart(
+        plot_backtest_trades_chart(
+            df=df_sliced,
+            trades=single_perf.trades,
+            symbol=tab4_symbol,
+            strategy_name=strat_display_names.get(selected_strat_key, selected_strat_key),
+            theme=theme_mode
+        ),
+        use_container_width=True,
+        config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+    )
+
+    # 3. Portfolio Net Equity Growth
     st.plotly_chart(
         plot_equity_curve(bt_engine.equity_history, theme=theme_mode),
         use_container_width=True,
         config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
     )
 
+    # 4. Indian Statutory Taxes & Charges Breakdown
     st.markdown("---")
     st.subheader("🧾 Statutory Indian Regulatory Taxes & Brokerage (SEBI / NSE)")
     c_tax1, c_tax2 = st.columns(2)
@@ -857,8 +927,9 @@ with tab4:
     with c_tax2:
         st.info("Includes Flat Brokerage, STT (0.025%), NSE Exchange Charges (0.00345%), 18% GST, SEBI Turnover Fees, and Stamp Duty.")
 
+    # 5. Full Trade Execution Diary
     st.markdown("---")
-    st.subheader("📜 Complete Trade Execution Log")
+    st.subheader(f"📜 Complete Trade Execution Diary ({len(single_perf.trades)} Executed Trades)")
     render_trade_log_table(single_perf.trades)
 
 # TAB 5: Live Paper Trading
