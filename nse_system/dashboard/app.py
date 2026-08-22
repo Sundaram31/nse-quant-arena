@@ -44,34 +44,78 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 🎨 Theme Switcher in Sidebar
+# 🎨 Optional Manual Theme Override in Sidebar
 if "theme_mode" not in st.session_state:
-    st.session_state["theme_mode"] = "dark"
+    st.session_state["theme_mode"] = "auto"
 
 st.sidebar.markdown("### 🎨 Visual Theme")
 theme_choice = st.sidebar.radio(
-    "Select Display Mode",
-    ["🌙 Dark Mode", "☀️ Light Mode"],
-    index=0 if st.session_state["theme_mode"] == "dark" else 1,
+    "Theme Preference",
+    ["🌓 Auto (Follows 3-Dots Menu)", "☀️ Force Light", "🌙 Force Dark"],
+    index=0 if st.session_state.get("theme_mode") == "auto" else (1 if st.session_state["theme_mode"] == "light" else 2),
     horizontal=True,
     key="theme_radio_selector"
 )
-theme_mode = "dark" if "Dark" in theme_choice else "light"
+if "Force Light" in theme_choice:
+    theme_mode = "light"
+elif "Force Dark" in theme_choice:
+    theme_mode = "dark"
+else:
+    theme_mode = "auto"
 st.session_state["theme_mode"] = theme_mode
 
-# Dynamic Dark / Light Mode CSS Styling
-if theme_mode == "dark":
+# Inject Theme CSS
+if theme_mode == "light":
+    st.markdown("""
+    <style>
+        .stApp { background-color: #F8FAFC !important; color: #0F172A !important; }
+        section[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; }
+        .main-title { font-size: 1.85rem; font-weight: 800; color: #0F172A !important; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
+        .sub-title { font-size: 0.95rem; color: #64748B !important; margin-bottom: 1.2rem; }
+        .winner-box { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #065F46 !important; }
+        .diag-card { background: #FFFFFF !important; border: 1px solid #CBD5E1 !important; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1rem; color: #0F172A !important; }
+        .news-card { background: #F8FAFC !important; border-left: 4px solid #3B82F6 !important; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #0F172A !important; border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        
+        /* Metric Cards */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #CBD5E1 !important;
+            padding: 0.9rem 1.1rem !important;
+            border-radius: 12px !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
+        }
+        [data-testid="stMetricValue"] > div {
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
+            color: #0F172A !important;
+        }
+        [data-testid="stMetricLabel"] > div > p {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+            color: #475569 !important;
+        }
+        [data-testid="stMetricDelta"] > div {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+        }
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+            [data-testid="column"] { min-width: 46% !important; flex: 1 1 46% !important; margin-bottom: 0.6rem !important; }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+elif theme_mode == "dark":
     st.markdown("""
     <style>
         .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
         section[data-testid="stSidebar"] { background-color: #0F172A !important; border-right: 1px solid #1E293B !important; }
-        .main-title { font-size: 1.85rem; font-weight: 800; color: #F8FAFC; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
-        .sub-title { font-size: 0.95rem; color: #94A3B8; margin-bottom: 1.2rem; }
-        .winner-box { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #ECFDF5; }
-        .diag-card { background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 1rem; color: #F8FAFC; }
-        .news-card { background: #1E293B; border-left: 4px solid #38BDF8; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #F8FAFC; border-top: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155; }
+        .main-title { font-size: 1.85rem; font-weight: 800; color: #F8FAFC !important; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
+        .sub-title { font-size: 0.95rem; color: #94A3B8 !important; margin-bottom: 1.2rem; }
+        .winner-box { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #ECFDF5 !important; }
+        .diag-card { background: #1E293B !important; border: 1px solid #334155 !important; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 1rem; color: #F8FAFC !important; }
+        .news-card { background: #1E293B !important; border-left: 4px solid #38BDF8 !important; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #F8FAFC !important; border-top: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155; }
         
-        /* Dark Mode High-Contrast Metric Cards */
+        /* Metric Cards */
         [data-testid="stMetric"] {
             background-color: #1E293B !important;
             border: 1px solid #334155 !important;
@@ -93,8 +137,6 @@ if theme_mode == "dark":
             font-size: 0.85rem !important;
             font-weight: 700 !important;
         }
-
-        /* Mobile 2-column wrapping for small screens */
         @media (max-width: 768px) {
             [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
             [data-testid="column"] { min-width: 46% !important; flex: 1 1 46% !important; margin-bottom: 0.6rem !important; }
@@ -102,33 +144,33 @@ if theme_mode == "dark":
     </style>
     """, unsafe_allow_html=True)
 else:
+    # AUTO MODE: 100% Native Streamlit Variables (Instantly adapts when user clicks Light / Dark / System in 3-dots menu)
     st.markdown("""
     <style>
-        .stApp { background-color: #F8FAFC !important; color: #0F172A !important; }
-        section[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; }
-        .main-title { font-size: 1.85rem; font-weight: 800; color: #0F172A; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
-        .sub-title { font-size: 0.95rem; color: #64748B; margin-bottom: 1.2rem; }
-        .winner-box { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #065F46; }
-        .diag-card { background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1rem; color: #0F172A; }
-        .news-card { background: #F8FAFC; border-left: 4px solid #3B82F6; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #0F172A; border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        .main-title { font-size: 1.85rem; font-weight: 800; color: var(--text-color, currentColor); margin-bottom: 0.1rem; letter-spacing: -0.02em; }
+        .sub-title { font-size: 0.95rem; color: var(--text-color, currentColor); opacity: 0.75; margin-bottom: 1.2rem; }
+        .winner-box { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; }
+        .diag-card { background: var(--secondary-background-color, rgba(128,128,128,0.1)); border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 1rem; color: var(--text-color, currentColor); }
+        .news-card { background: var(--secondary-background-color, rgba(128,128,128,0.08)); border-left: 4px solid #38BDF8; border-top: 1px solid rgba(128, 128, 128, 0.15); border-right: 1px solid rgba(128, 128, 128, 0.15); border-bottom: 1px solid rgba(128, 128, 128, 0.15); padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: var(--text-color, currentColor); }
         
-        /* Light Mode High-Contrast Metric Cards */
+        /* High-Contrast Dynamic Metric Cards */
         [data-testid="stMetric"] {
-            background-color: #FFFFFF !important;
-            border: 1px solid #CBD5E1 !important;
+            background-color: var(--secondary-background-color, rgba(128,128,128,0.1)) !important;
+            border: 1px solid rgba(128, 128, 128, 0.25) !important;
             padding: 0.9rem 1.1rem !important;
             border-radius: 12px !important;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
         }
         [data-testid="stMetricValue"] > div {
             font-size: 1.35rem !important;
             font-weight: 800 !important;
-            color: #0F172A !important;
+            color: var(--text-color, currentColor) !important;
         }
         [data-testid="stMetricLabel"] > div > p {
             font-size: 0.85rem !important;
             font-weight: 700 !important;
-            color: #475569 !important;
+            color: var(--text-color, currentColor) !important;
+            opacity: 0.85 !important;
         }
         [data-testid="stMetricDelta"] > div {
             font-size: 0.85rem !important;

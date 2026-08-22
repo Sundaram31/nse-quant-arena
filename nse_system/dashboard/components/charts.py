@@ -9,31 +9,10 @@ from nse_system.analytics.rrg import RRGPoint
 from nse_system.core.models import OptionsChainData, Trade
 
 
-def _get_theme_colors(theme: str = "dark") -> Dict[str, str]:
+def _get_theme_colors(theme: str = "auto") -> Dict[str, str]:
     """Returns color palette for chart components based on selected theme."""
-    is_dark = str(theme).lower() == "dark"
-    if is_dark:
-        return {
-            "bg": "#0B0F19",
-            "paper_bg": "#0F172A",
-            "grid": "#1E293B",
-            "text": "#E2E8F0",
-            "subtext": "#94A3B8",
-            "up_color": "#10B981",
-            "down_color": "#EF4444",
-            "ema9": "#F59E0B",
-            "ema21": "#3B82F6",
-            "ema50": "#A855F7",
-            "entry_color": "#38BDF8",
-            "sl_color": "#F87171",
-            "target1_color": "#34D399",
-            "target2_color": "#10B981",
-            "cpr_color": "rgba(148, 163, 184, 0.6)",
-            "call_bar": "#F87171",
-            "put_bar": "#34D399",
-            "border": "#334155"
-        }
-    else:
+    t = str(theme).lower()
+    if "light" in t:
         return {
             "bg": "#FFFFFF",
             "paper_bg": "#F8FAFC",
@@ -52,7 +31,52 @@ def _get_theme_colors(theme: str = "dark") -> Dict[str, str]:
             "cpr_color": "rgba(100, 116, 139, 0.5)",
             "call_bar": "#EF4444",
             "put_bar": "#10B981",
-            "border": "#CBD5E1"
+            "border": "#CBD5E1",
+            "plotly_template": "plotly_white"
+        }
+    elif "dark" in t:
+        return {
+            "bg": "#0B0F19",
+            "paper_bg": "#0F172A",
+            "grid": "#1E293B",
+            "text": "#E2E8F0",
+            "subtext": "#94A3B8",
+            "up_color": "#10B981",
+            "down_color": "#EF4444",
+            "ema9": "#F59E0B",
+            "ema21": "#3B82F6",
+            "ema50": "#A855F7",
+            "entry_color": "#38BDF8",
+            "sl_color": "#F87171",
+            "target1_color": "#34D399",
+            "target2_color": "#10B981",
+            "cpr_color": "rgba(148, 163, 184, 0.6)",
+            "call_bar": "#F87171",
+            "put_bar": "#34D399",
+            "border": "#334155",
+            "plotly_template": "plotly_dark"
+        }
+    else:  # "auto" -> adaptive transparent canvas that seamlessly inherits Streamlit's native theme
+        return {
+            "bg": "rgba(0,0,0,0)",
+            "paper_bg": "rgba(0,0,0,0)",
+            "grid": "rgba(128, 128, 128, 0.2)",
+            "text": "#94A3B8",
+            "subtext": "#94A3B8",
+            "up_color": "#10B981",
+            "down_color": "#EF4444",
+            "ema9": "#F59E0B",
+            "ema21": "#3B82F6",
+            "ema50": "#A855F7",
+            "entry_color": "#38BDF8",
+            "sl_color": "#F87171",
+            "target1_color": "#34D399",
+            "target2_color": "#10B981",
+            "cpr_color": "rgba(148, 163, 184, 0.6)",
+            "call_bar": "#F87171",
+            "put_bar": "#34D399",
+            "border": "rgba(128, 128, 128, 0.25)",
+            "plotly_template": "none"
         }
 
 
