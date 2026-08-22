@@ -1015,8 +1015,18 @@ with tab6:
     df_status = collector.get_datastore_status()
     total_files = len(df_status)
     total_bars = int(df_status["Total Bars"].sum()) if not df_status.empty and "Total Bars" in df_status.columns else 2327007
-    fno_count = sum(1 for u in df_status.get("Universe", []) if "F&O" in str(u) or "NIFTY 50" in str(u))
-    n500_count = sum(1 for u in df_status.get("Universe", []) if "NIFTY 500" in str(u) or "NIFTY 50" in str(u))
+    
+    db_symbols = set(df_status["Symbol"].str.upper()) if not df_status.empty and "Symbol" in df_status.columns else set()
+    fno_universe = UniverseManager.get_fno_symbols()
+    n500_universe = UniverseManager.get_nifty_500_symbols()
+    
+    fno_count = len(set(fno_universe).intersection(db_symbols))
+    n500_count = len(set(n500_universe).intersection(db_symbols))
+    fno_total = len(fno_universe)
+    n500_total = len(n500_universe)
+    fno_pct = (fno_count / max(1, fno_total)) * 100.0
+    n500_pct = (n500_count / max(1, n500_total)) * 100.0
+
     min_date = df_status["Start Date"].min() if not df_status.empty and "Start Date" in df_status.columns else "2021-08-02"
     max_date = df_status["End Date"].max() if not df_status.empty and "End Date" in df_status.columns else "2026-08-21"
 
@@ -1024,9 +1034,9 @@ with tab6:
     with scol1:
         st.metric("Total Datastore Assets", f"{total_files:,} Stocks", "100% NSE Market")
     with scol2:
-        st.metric("F&O Universe Coverage", f"{fno_count} / 190", "100.0% Complete")
+        st.metric("F&O Universe Coverage", f"{fno_count} / {fno_total}", f"{fno_pct:.1f}% Complete")
     with scol3:
-        st.metric("NIFTY 500 Coverage", f"{n500_count} / 501", "100.0% Complete")
+        st.metric("NIFTY 500 Coverage", f"{n500_count} / {n500_total}", f"{n500_pct:.1f}% Complete")
     with scol4:
         st.metric("Total Verified Bars", f"{total_bars:,}", "Zero Synthetic Mock")
     with scol5:

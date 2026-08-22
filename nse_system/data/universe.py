@@ -1,4 +1,5 @@
 """NSE Universe Management - NIFTY 500, F&O Stocks, and Sectoral Baskets."""
+import os
 from typing import List, Dict, Optional
 import requests
 import pandas as pd
@@ -55,6 +56,17 @@ class UniverseManager:
     @classmethod
     def get_nifty_500_symbols(cls) -> List[str]:
         """Fetches official NIFTY 500 constituents from NSE or uses pre-configured master list."""
+        json_path = os.path.join(os.path.dirname(__file__), 'nifty500_constituents.json')
+        if os.path.exists(json_path):
+            try:
+                import json
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                if data and isinstance(data, list) and len(data) >= 100:
+                    return [s.strip().upper() for s in data if s.strip()]
+            except Exception:
+                pass
+
         try:
             url = 'https://archives.nseindia.com/content/indices/ind_nifty500list.csv'
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -63,7 +75,7 @@ class UniverseManager:
                 import io
                 df = pd.read_csv(io.StringIO(resp.text))
                 if 'Symbol' in df.columns:
-                    return df['Symbol'].tolist()
+                    return [s.strip().upper() for s in df['Symbol'].tolist() if s.strip()]
         except Exception:
             pass
 
