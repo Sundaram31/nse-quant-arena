@@ -152,21 +152,23 @@ class QuantStockScreener:
     def scan_universe(
         self,
         universe_name: str = 'fno',
-        min_confidence: float = 60.0
+        min_confidence: float = 60.0,
+        as_of_date: Optional[datetime] = None
     ) -> List[ScreenerCandidate]:
         """Runs comprehensive multi-factor scan across the stock universe."""
         symbols = UniverseManager.get_universe(universe_name)
-        return self.scan_custom_symbols(symbols[:60], min_confidence=min_confidence)
+        return self.scan_custom_symbols(symbols, min_confidence=min_confidence, as_of_date=as_of_date)
 
     def scan_custom_symbols(
         self,
         symbols: List[str],
-        min_confidence: float = 50.0
+        min_confidence: float = 50.0,
+        as_of_date: Optional[datetime] = None
     ) -> List[ScreenerCandidate]:
         """Runs scan on a user-provided list of favourite stocks/symbols."""
         candidates: List[ScreenerCandidate] = []
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=60)
+        end_date = as_of_date or datetime.now()
+        start_date = end_date - timedelta(days=120)
 
         # Compute RRG Relative Strength vs NIFTY 50 Benchmark
         benchmark_df = self.data_provider.get_historical_dataframe('NIFTY 50', start_date, end_date, '1d')
