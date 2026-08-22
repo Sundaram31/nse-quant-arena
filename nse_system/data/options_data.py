@@ -63,6 +63,11 @@ class OptionsDataProvider:
         total_call_vol = 0.0
         total_put_vol = 0.0
 
+        # Base scale depending on underlying
+        is_index = any(idx in clean_sym for idx in ['NIFTY', 'BANK', 'FINNIFTY'])
+        base_oi = 2500000.0 if is_index else 150000.0
+        base_vol = 800000.0 if is_index else 50000.0
+
         for strike in strikes:
             moneyness = (spot_price - strike) / spot_price
             
@@ -71,9 +76,12 @@ class OptionsDataProvider:
             time_val_call = spot_price * (atm_iv / 100.0) * math.sqrt(4 / 365.0) * math.exp(-0.5 * (moneyness * 10)**2)
             call_ltp = round(max(0.05, call_intrinsic + time_val_call), 2)
             
-            call_oi = 0.0
-            call_change_oi = 0.0
-            call_vol = 0.0
+            round_bonus = 1.35 if (strike % (strike_step * 5) == 0) else (1.15 if (strike % (strike_step * 2) == 0) else 1.0)
+            call_distance = (strike - spot_price) / max(1.0, spot_price * 0.02)
+            call_decay = math.exp(-0.5 * ((call_distance - 1.2) / 2.2) ** 2)
+            call_oi = float(round(base_oi * call_decay * round_bonus))
+            call_vol = float(round(base_vol * math.exp(-0.5 * (call_distance / 2.0) ** 2) * round_bonus))
+            call_change_oi = float(round(call_oi * 0.08 * math.sin(strike)))
             call_buildup = OIBuildupType.LONG_BUILDUP if moneyness > 0 else OIBuildupType.SHORT_BUILDUP
 
             contracts.append(OptionContract(
@@ -91,15 +99,19 @@ class OptionsDataProvider:
                 buildup=call_buildup
             ))
             call_oi_map[strike] = call_oi
+            total_call_oi += call_oi
+            total_call_vol += call_vol
 
             # Put Option
             put_intrinsic = max(0.0, strike - spot_price)
             time_val_put = spot_price * (atm_iv / 100.0) * math.sqrt(4 / 365.0) * math.exp(-0.5 * (moneyness * 10)**2)
             put_ltp = round(max(0.05, put_intrinsic + time_val_put), 2)
 
-            put_oi = 0.0
-            put_change_oi = 0.0
-            put_vol = 0.0
+            put_distance = (spot_price - strike) / max(1.0, spot_price * 0.02)
+            put_decay = math.exp(-0.5 * ((put_distance - 1.2) / 2.2) ** 2)
+            put_oi = float(round(base_oi * 0.95 * put_decay * round_bonus))
+            put_vol = float(round(base_vol * math.exp(-0.5 * (put_distance / 2.0) ** 2) * round_bonus))
+            put_change_oi = float(round(put_oi * 0.08 * math.cos(strike)))
             put_buildup = OIBuildupType.SHORT_BUILDUP if moneyness < 0 else OIBuildupType.LONG_BUILDUP
 
             contracts.append(OptionContract(
@@ -117,6 +129,8 @@ class OptionsDataProvider:
                 buildup=put_buildup
             ))
             put_oi_map[strike] = put_oi
+            total_put_oi += put_oi
+            total_put_vol += put_vol
 
         # PCR Calculations
         pcr_oi = total_put_oi / max(1.0, total_call_oi)

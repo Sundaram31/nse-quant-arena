@@ -25,6 +25,9 @@ from nse_system.analytics.volatility import VolatilityEngine
 from nse_system.analytics.screener import QuantStockScreener, TradingType
 from nse_system.engine.arena import StrategyBattleArena
 from nse_system.engine.backtest import BacktestEngine
+from nse_system.broker.paper_broker import PaperBroker
+from nse_system.engine.paper import PaperTradingEngine
+from nse_system.core.constants import OrderSide, OrderType, ProductType, OrderStatus
 from nse_system.strategies import STRATEGY_REGISTRY, get_strategy
 try:
     from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve, plot_stock_strategy_chart
@@ -824,19 +827,148 @@ with tab4:
 
 # TAB 5: Live Paper Trading
 with tab5:
-    st.subheader("⚡ Real-Time Paper Trading Room (Zero-Cost)")
-    st.write("Simulate live order execution, margin utilization, and 15:15 IST auto-squareoff without risking capital or needing broker APIs.")
+    st.subheader("⚡ Real-Time Paper Trading & Execution Simulator")
+    st.write("Simulate live order execution, trailing stop-losses, margin utilization, and 15:15 IST auto-squareoff without risking capital or needing broker APIs.")
 
-    pcol1, pcol2, pcol3 = st.columns(3)
+    # Initialize paper broker in session state
+    if "paper_broker" not in st.session_state or getattr(st.session_state["paper_broker"], "capital", 0.0) != capital:
+        st.session_state["paper_broker"] = PaperBroker(initial_capital=capital)
+        st.session_state["paper_broker"].connect()
+
+    p_broker = st.session_state["paper_broker"]
+    pnl_summary = p_broker.calculate_pnl()
+    margins = p_broker.get_margins()
+    open_positions = p_broker.get_open_positions()
+
+    pcol1, pcol2, pcol3, pcol4, pcol5 = st.columns(5)
     with pcol1:
-        st.metric("Available Cash Margin", f"₹{capital:,.2f}")
+        st.metric("Available Cash", f"₹{margins['available_cash']:,.2f}")
     with pcol2:
-        st.metric("Active Positions", "0 Open")
+        st.metric("Used Margin", f"₹{margins['used_margin']:,.2f}")
     with pcol3:
-        st.metric("Today Net MTM PnL", "₹0.00")
+        st.metric("Open Positions", f"{len(open_positions)} Active")
+    with pcol4:
+        st.metric("Realized PnL (Net)", f"₹{pnl_summary['total_realized_pnl']:+,.2f}")
+    with pcol5:
+        st.metric("Total Net MTM PnL", f"₹{pnl_summary['total_net_pnl']:+,.2f}")
 
-    st.button("🔴 Start Live Paper Trading Session", type="primary")
-    st.info("Paper Broker is active. Orders are simulated with realistic slippage, liquidity verification, and 15:15 IST auto-squareoff supervisor.")
+    st.markdown("---")
+    ord_col1, ord_col2 = st.columns([3, 2])
+    
+    with ord_col1:
+        st.markdown("#### 📝 Live Order Entry Ticket")
+        t_sym_list = [selected_symbol, "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "TATAMOTORS", "MUTHOOTFIN", "MCX"]
+        t_sym_list = list(dict.fromkeys(t_sym_list + UniverseManager.get_fno_symbols()[:15]))
+        
+        tc1, tc2, tc3 = st.columns(3)
+        with tc1:
+            trade_sym = st.selectbox("Trading Symbol", t_sym_list, index=0, key="paper_trade_sym")
+        with tc2:
+            trade_side = st.selectbox("Order Side", ["BUY (Long)", "SELL (Short)"], index=0, key="paper_trade_side")
+        with tc3:
+            trade_product = st.selectbox("Product Type", ["MIS (Intraday)", "CNC / NRML (Delivery)"], index=0, key="paper_trade_prod")
+
+        # Get latest spot price
+        df_p_spot = data_provider.get_historical_dataframe(trade_sym, datetime.now() - timedelta(days=60), datetime.now(), "1d")
+        default_price = float(df_p_spot["close"].iloc[-1]) if not df_p_spot.empty and "close" in df_p_spot.columns else 1000.0
+
+        tc4, tc5, tc6 = st.columns(3)
+        with tc4:
+            trade_qty = st.number_input("Order Quantity (Shares)", min_value=1, max_value=10000, value=25, step=5, key="paper_trade_qty")
+        with tc5:
+            trade_price = st.number_input("Execution Price (INR)", min_value=0.05, value=default_price, step=0.5, key="paper_trade_price")
+        with tc6:
+            default_sl = round(default_price * 0.985 if "BUY" in trade_side else default_price * 1.015, 2)
+            trade_sl = st.number_input("Stop Loss (INR)", min_value=0.0, value=default_sl, step=0.5, key="paper_trade_sl")
+
+        default_target = round(default_price * 1.03 if "BUY" in trade_side else default_price * 0.97, 2)
+        trade_target = st.number_input("Target Price (INR, Optional)", min_value=0.0, value=default_target, step=0.5, key="paper_trade_tgt")
+
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            if st.button("🚀 Place Paper Order", type="primary", key="btn_place_paper_order"):
+                prod = ProductType.MIS if "MIS" in trade_product else ProductType.CNC
+                if "BUY" in trade_side:
+                    ord_res = p_broker.buy(
+                        symbol=trade_sym,
+                        quantity=int(trade_qty),
+                        price=float(trade_price),
+                        stop_loss=float(trade_sl) if trade_sl > 0 else None,
+                        target=float(trade_target) if trade_target > 0 else None,
+                        product_type=prod
+                    )
+                    st.success(f"✅ Filled Paper BUY order for {trade_qty} {trade_sym} at ₹{trade_price:,.2f}!")
+                else:
+                    ord_res = p_broker.sell(
+                        symbol=trade_sym,
+                        quantity=int(trade_qty),
+                        price=float(trade_price),
+                        stop_loss=float(trade_sl) if trade_sl > 0 else None,
+                        target=float(trade_target) if trade_target > 0 else None,
+                        product_type=prod
+                    )
+                    st.success(f"✅ Filled Paper SELL order for {trade_qty} {trade_sym} at ₹{trade_price:,.2f}!")
+                st.rerun()
+
+        with btn_col2:
+            if st.button("🔴 Close Position for " + trade_sym, key="btn_close_paper_pos"):
+                tr = p_broker.close_position(trade_sym, exit_price=float(trade_price))
+                if tr:
+                    st.success(f"✅ Closed position for {trade_sym}. Realized Net PnL: ₹{tr.net_pnl:+,.2f}")
+                else:
+                    st.info(f"No open position found for {trade_sym}.")
+                st.rerun()
+
+        with btn_col3:
+            if st.button("🛑 15:15 Auto Square-off All", key="btn_close_all_paper"):
+                closed_trs = p_broker.close_all_positions()
+                if closed_trs:
+                    st.success(f"✅ Squared off {len(closed_trs)} open positions!")
+                else:
+                    st.info("No active open positions to square off.")
+                st.rerun()
+
+    with ord_col2:
+        st.markdown("#### 🎯 Trailing SL & Risk Controller")
+        trail_pct = st.slider("Dynamic Trailing SL (% of Move)", min_value=0.5, max_value=5.0, value=1.5, step=0.1, key="paper_trail_pct")
+        if st.button("🔄 Update Dynamic Trailing SL", key="btn_update_trailing_sl"):
+            updated_count = 0
+            for pos in open_positions:
+                new_sl = p_broker.update_trailing_sl(pos.symbol, current_price=pos.ltp, trailing_pct=trail_pct)
+                if new_sl:
+                    updated_count += 1
+            st.success(f"✅ Updated trailing stop losses for {updated_count} active positions!")
+            st.rerun()
+
+        st.info("💡 **Risk Rule**: Mandatory 15:15 IST auto-squareoff prevents intraday MIS overnight penalty. Trailing SL ratchets upward on green candles.")
+
+    st.markdown("---")
+    st.markdown("#### 📊 Active Open Positions")
+    if open_positions:
+        pos_records = []
+        for p in open_positions:
+            pos_records.append({
+                "Symbol": p.symbol,
+                "Product": p.product_type.value if hasattr(p.product_type, 'value') else str(p.product_type),
+                "Qty": p.quantity,
+                "Avg Price": f"₹{p.avg_price:,.2f}",
+                "LTP": f"₹{p.ltp:,.2f}",
+                "Unrealized PnL": f"₹{p.unrealized_pnl:+,.2f}",
+                "Stop Loss": f"₹{p_broker.stop_losses.get(p.symbol, 0.0):,.2f}" if p.symbol in p_broker.stop_losses else "None",
+                "Target": f"₹{p_broker.targets.get(p.symbol, 0.0):,.2f}" if p.symbol in p_broker.targets else "None",
+                "Status": "🟢 LONG" if p.quantity > 0 else "🔴 SHORT"
+            })
+        st.dataframe(pd.DataFrame(pos_records), use_container_width=True)
+    else:
+        st.info("No active open paper positions. Place an order above to initiate a trade.")
+
+    st.markdown("---")
+    st.markdown("#### 📜 Executed Paper Trade History")
+    paper_trades = p_broker.get_trades()
+    if paper_trades:
+        render_trade_log_table(paper_trades)
+    else:
+        st.write("No closed paper trades recorded in this session.")
 
 # TAB 6: Data Manager & EOD Sync
 with tab6:

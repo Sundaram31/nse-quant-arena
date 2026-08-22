@@ -579,4 +579,29 @@ class QuantStockScreener:
                 atr=round(atr_val, 2)
             )
 
-        return None
+        # -------------------------------------------------------------
+        # SETUP 4: CONSOLIDATION / MEAN REVERSION (Neutral / Rangebound Fallback)
+        # -------------------------------------------------------------
+        is_above_pivot = curr_price >= cpr.pivot
+        t_type = TradingType.SWING_LONG if is_above_pivot else TradingType.SWING_SHORT
+        sl = round(min(curr_price - 1.0 * atr_val, cpr.bc) if is_above_pivot else max(curr_price + 1.0 * atr_val, cpr.tc), 2)
+        risk = max(1.0, abs(curr_price - sl))
+        t1 = round(curr_price + (1.2 * risk) if is_above_pivot else curr_price - (1.2 * risk), 2)
+        t2 = round(curr_price + (2.5 * risk) if is_above_pivot else curr_price - (2.5 * risk), 2)
+        
+        return ScreenerCandidate(
+            symbol=symbol,
+            trading_type=t_type,
+            matched_strategy='CPR Mean Reversion / Rangebound Consolidation',
+            confidence_score=45.0,
+            current_price=curr_price,
+            entry_trigger=round(curr_price, 2),
+            stop_loss=sl,
+            target_1=t1,
+            target_2=t2,
+            risk_reward_ratio='1:1.2 (Target 1) | 1:2.5 (Target 2)',
+            rrg_quadrant=f'{quadrant_str}',
+            oi_buildup='Rangebound',
+            catalyst_reason=f'Consolidating within CPR bands (Pivot: ₹{cpr.pivot:.2f}, RSI: {rsi_val:.1f})',
+            atr=round(atr_val, 2)
+        )

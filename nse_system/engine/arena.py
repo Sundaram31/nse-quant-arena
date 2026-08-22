@@ -100,3 +100,6 @@ class StrategyBattleArena:
             avoid_strategies=avoid,
             executive_summary=summary
         )
+
+    # Alias for flexibility across CLI, API, and UI harnesses
+    run_arena = run_tournament

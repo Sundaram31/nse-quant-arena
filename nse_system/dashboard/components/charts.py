@@ -76,21 +76,32 @@ def plot_rrg_chart(rrg_data: Optional[Dict[str, RRGPoint]]) -> Optional[alt.Char
     ).interactive()
     return chart
 
-def plot_options_oi(chain: OptionsChainData) -> alt.Chart:
+def plot_options_oi(chain: Optional[OptionsChainData]) -> alt.Chart:
     """Generates strike-wise Call vs Put Open Interest bar chart."""
+    if not chain or not chain.contracts:
+        empty_df = pd.DataFrame({'x': [0], 'y': [0], 'Message': ['No options chain data available']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(
+            width=700, height=350, title='Options Open Interest - Awaiting Data'
+        )
+
     records = []
     for c in chain.contracts:
         records.append({
             'Strike': str(int(c.strike)),
-            'Strike_Num': c.strike,
-            'Option_Type': 'Call OI (Resistance)' if c.option_type.value == 'CE' else 'Put OI (Support)',
-            'Open_Interest': c.oi
+            'Strike_Num': float(c.strike),
+            'Option_Type': 'Call OI (Resistance)' if getattr(c.option_type, 'value', str(c.option_type)) == 'CE' else 'Put OI (Support)',
+            'Open_Interest': float(c.oi)
         })
 
     df = pd.DataFrame(records)
-    # Filter 10 strikes around ATM
-    atm = chain.atm_strike
-    df = df[(df['Strike_Num'] >= atm - 300) & (df['Strike_Num'] <= atm + 300)]
+    if df.empty:
+        empty_df = pd.DataFrame({'x': [0], 'y': [0], 'Message': ['No options chain contracts available']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(width=700, height=350)
+
+    # Dynamic 16 strikes closest to ATM (works for any index or stock price)
+    atm = float(chain.atm_strike)
+    df['dist'] = (df['Strike_Num'] - atm).abs()
+    df = df.sort_values('dist').head(24).sort_values('Strike_Num').drop(columns=['dist'])
 
     chart = alt.Chart(df).mark_bar().encode(
         x=alt.X('Strike:O', sort=alt.SortField('Strike_Num', order='ascending'), title='Strike Price'),
@@ -100,20 +111,26 @@ def plot_options_oi(chain: OptionsChainData) -> alt.Chart:
             range=['#EF4444', '#10B981']
         )),
         xOffset='Option_Type:N',
-        tooltip=['Strike', 'Option_Type', 'Open_Interest']
+        tooltip=['Strike', 'Option_Type', alt.Tooltip('Open_Interest:Q', format=',.0f')]
     ).properties(
         width=700,
         height=350,
-        title=f'{chain.underlying} Open Interest Distribution | PCR: {chain.pcr_oi:.2f} | Max Pain: {chain.max_pain}'
+        title=f'{chain.underlying} Open Interest Distribution | PCR: {chain.pcr_oi:.2f} | Max Pain: ₹{chain.max_pain:,.0f}'
     )
     return chart
 
 def plot_equity_curve(equity_history: List[Dict[str, Any]]) -> alt.Chart:
     """Plots portfolio equity growth over time."""
     if not equity_history:
-        return alt.Chart(pd.DataFrame({'x': [], 'y': []})).mark_line()
+        empty_df = pd.DataFrame({'x': [0], 'y': [0], 'Message': ['No equity curve history generated yet']})
+        return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(
+            width=700, height=320, title='Portfolio Net Equity Curve'
+        )
 
     df = pd.DataFrame(equity_history)
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
     chart = alt.Chart(df).mark_area(
         line={'color': '#10B981', 'width': 2},
         color=alt.Gradient(
@@ -125,7 +142,7 @@ def plot_equity_curve(equity_history: List[Dict[str, Any]]) -> alt.Chart:
     ).encode(
         x=alt.X('timestamp:T', title='Date & Time'),
         y=alt.Y('equity:Q', title='Portfolio Equity (INR)', scale=alt.Scale(zero=False)),
-        tooltip=['timestamp:T', 'equity:Q', 'close:Q']
+        tooltip=['timestamp:T', alt.Tooltip('equity:Q', format=',.2f')]
     ).properties(
         width=700,
         height=320,
@@ -150,8 +167,15 @@ def plot_stock_strategy_chart(
         return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(width=750, height=420)
 
     plot_df = df.tail(num_bars).copy()
+    plot_df.columns = [str(c).lower() for c in plot_df.columns]
     if 'timestamp' not in plot_df.columns:
-        plot_df['timestamp'] = plot_df.index
+        if 'date' in plot_df.columns:
+            plot_df['timestamp'] = plot_df['date']
+        else:
+            plot_df['timestamp'] = plot_df.index
+    plot_df['timestamp'] = pd.to_datetime(plot_df['timestamp'])
+    if 'volume' not in plot_df.columns:
+        plot_df['volume'] = 0.0
 
     # Calculate Key Indicators
     plot_df['ema9'] = plot_df['close'].ewm(span=9, adjust=False).mean()

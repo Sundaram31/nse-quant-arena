@@ -104,30 +104,36 @@ class HistoricalDataCollector:
 
     def get_datastore_status(self) -> pd.DataFrame:
         """Returns summary of all locally stored datasets."""
-        records = []
         if not os.path.exists(self.data_dir):
             return pd.DataFrame()
 
-        for fname in os.listdir(self.data_dir):
-            if fname.endswith('.parquet'):
-                fpath = os.path.join(self.data_dir, fname)
-                try:
-                    df = pd.read_parquet(fpath)
-                    parts = fname.replace('.parquet', '').split('_')
-                    tf = parts[-1]
-                    sym = '_'.join(parts[:-1])
-                    size_kb = os.path.getsize(fpath) / 1024.0
+        parquet_files = [f for f in os.listdir(self.data_dir) if f.endswith('.parquet')]
+        if not parquet_files:
+            return pd.DataFrame()
 
-                    records.append({
-                        'Symbol': sym,
-                        'Timeframe': tf,
-                        'Total Bars': len(df),
-                        'Start Date': df.index.min().strftime('%Y-%m-%d %H:%M') if not df.empty else 'N/A',
-                        'End Date': df.index.max().strftime('%Y-%m-%d %H:%M') if not df.empty else 'N/A',
-                        'File Size (KB)': round(size_kb, 1),
-                        'Last Close': round(float(df['close'].iloc[-1]), 2) if not df.empty else 0.0
-                    })
-                except Exception:
-                    pass
+        def _read_file_meta(fname):
+            fpath = os.path.join(self.data_dir, fname)
+            try:
+                df = pd.read_parquet(fpath)
+                parts = fname.replace('.parquet', '').split('_')
+                tf = parts[-1]
+                sym = '_'.join(parts[:-1])
+                size_kb = os.path.getsize(fpath) / 1024.0
+
+                return {
+                    'Symbol': sym,
+                    'Timeframe': tf,
+                    'Total Bars': len(df),
+                    'Start Date': df.index.min().strftime('%Y-%m-%d %H:%M') if not df.empty else 'N/A',
+                    'End Date': df.index.max().strftime('%Y-%m-%d %H:%M') if not df.empty else 'N/A',
+                    'File Size (KB)': round(size_kb, 1),
+                    'Last Close': round(float(df['close'].iloc[-1]), 2) if not df.empty else 0.0
+                }
+            except Exception:
+                return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            records = [r for r in executor.map(_read_file_meta, parquet_files) if r is not None]
 
         return pd.DataFrame(records)
+
