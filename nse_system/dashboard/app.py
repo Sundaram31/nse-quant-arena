@@ -1139,11 +1139,10 @@ with tab6:
 
     with insp_col2:
         df_inspect = data_provider.get_historical_dataframe(
-            symbol=inspect_sym,
-            start_date=datetime(2021, 1, 1),
-            end_date=datetime.now(),
-            timeframe="1d",
-            adjusted=True
+            inspect_sym,
+            datetime(2021, 1, 1),
+            datetime.now(),
+            "1d"
         )
         if not df_inspect.empty:
             st.markdown(f"**{inspect_sym} Datastore Record:** Total **{len(df_inspect):,} continuous bars** | Span: **{df_inspect.index.min().strftime('%d-%b-%Y')}** to **{df_inspect.index.max().strftime('%d-%b-%Y')}** | Last Close: **₹{float(df_inspect['close'].iloc[-1]):,.2f}**")

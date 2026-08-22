@@ -57,10 +57,12 @@ class NSEHistoricalDataProvider(BaseDataProvider):
         start_date: datetime,
         end_date: datetime,
         timeframe: str = '5m',
-        adjusted: bool = True
+        adjusted: bool = True,
+        *args,
+        **kwargs
     ) -> List[Candle]:
         """Return list of typed Candle objects with continuous split/bonus adjusted data."""
-        df = self.get_historical_dataframe(symbol, start_date, end_date, timeframe, adjusted=adjusted)
+        df = self.get_historical_dataframe(symbol, start_date, end_date, timeframe, adjusted=adjusted, **kwargs)
         candles: List[Candle] = []
         for row in df.itertuples():
             candles.append(Candle(
@@ -81,7 +83,9 @@ class NSEHistoricalDataProvider(BaseDataProvider):
         start_date: datetime,
         end_date: datetime,
         timeframe: str = '5m',
-        adjusted: bool = True
+        adjusted: bool = True,
+        *args,
+        **kwargs
     ) -> pd.DataFrame:
         """Fetch historical DataFrame with automatic backward corporate action adjustments."""
         sym_info = get_symbol_info(symbol)

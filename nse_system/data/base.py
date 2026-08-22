@@ -14,7 +14,9 @@ class BaseDataProvider(ABC):
         symbol: str,
         start_date: datetime,
         end_date: datetime,
-        timeframe: str = '5m'
+        timeframe: str = '5m',
+        *args,
+        **kwargs
     ) -> List[Candle]:
         """Fetch historical candles for a symbol."""
         pass
@@ -25,7 +27,9 @@ class BaseDataProvider(ABC):
         symbol: str,
         start_date: datetime,
         end_date: datetime,
-        timeframe: str = '5m'
+        timeframe: str = '5m',
+        *args,
+        **kwargs
     ) -> pd.DataFrame:
         """Fetch historical candles as a pandas DataFrame with OHLCV columns."""
         pass
