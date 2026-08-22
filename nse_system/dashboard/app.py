@@ -29,98 +29,12 @@ from nse_system.broker.paper_broker import PaperBroker
 from nse_system.engine.paper import PaperTradingEngine
 from nse_system.core.constants import OrderSide, OrderType, ProductType, OrderStatus
 from nse_system.strategies import STRATEGY_REGISTRY, get_strategy
-try:
-    from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve, plot_stock_strategy_chart
-except (ImportError, AttributeError):
-    from nse_system.dashboard.components.charts import plot_rrg_chart, plot_options_oi, plot_equity_curve
-    def plot_stock_strategy_chart(
-        df: pd.DataFrame,
-        symbol: str,
-        entry_trigger: Optional[float] = None,
-        stop_loss: Optional[float] = None,
-        target_1: Optional[float] = None,
-        target_2: Optional[float] = None,
-        cpr: Optional[Any] = None,
-        strategy_name: Optional[str] = None,
-        num_bars: int = 60
-    ) -> Any:
-        import altair as alt
-        if df.empty or len(df) < 5:
-            empty_df = pd.DataFrame({'x': [100.0], 'y': [100.0], 'Message': [f'Insufficient historical candle data for {symbol}']})
-            return alt.Chart(empty_df).mark_text(size=14, color='#64748B').encode(text='Message:N').properties(width=750, height=420)
-
-        plot_df = df.tail(num_bars).copy()
-        if 'timestamp' not in plot_df.columns:
-            plot_df['timestamp'] = plot_df.index
-
-        plot_df['ema9'] = plot_df['close'].ewm(span=9, adjust=False).mean()
-        plot_df['ema21'] = plot_df['close'].ewm(span=21, adjust=False).mean()
-        plot_df['ema50'] = plot_df['close'].ewm(span=50, adjust=False).mean()
-
-        min_p = float(plot_df['low'].min()) * 0.98
-        max_p = float(plot_df['high'].max()) * 1.02
-        if stop_loss and stop_loss > 0: min_p = min(min_p, stop_loss * 0.98)
-        if target_2 and target_2 > 0: max_p = max(max_p, target_2 * 1.02)
-
-        rule = alt.Chart(plot_df).mark_rule().encode(
-            x=alt.X('timestamp:T', title='Date', axis=alt.Axis(format='%d-%b', labelAngle=-45)),
-            y=alt.Y('low:Q', scale=alt.Scale(domain=[min_p, max_p], zero=False), title='Price (INR)'),
-            y2='high:Q',
-            color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
-            tooltip=[
-                alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
-                alt.Tooltip('open:Q', title='Open', format=',.2f'),
-                alt.Tooltip('high:Q', title='High', format=',.2f'),
-                alt.Tooltip('low:Q', title='Low', format=',.2f'),
-                alt.Tooltip('close:Q', title='Close', format=',.2f'),
-                alt.Tooltip('volume:Q', title='Volume', format=',.0f')
-            ]
-        )
-
-        bar = alt.Chart(plot_df).mark_bar(size=7).encode(
-            x='timestamp:T',
-            y='open:Q',
-            y2='close:Q',
-            color=alt.condition('datum.open <= datum.close', alt.value('#10B981'), alt.value('#EF4444')),
-            tooltip=[
-                alt.Tooltip('timestamp:T', title='Date', format='%Y-%m-%d'),
-                alt.Tooltip('open:Q', title='Open', format=',.2f'),
-                alt.Tooltip('high:Q', title='High', format=',.2f'),
-                alt.Tooltip('low:Q', title='Low', format=',.2f'),
-                alt.Tooltip('close:Q', title='Close', format=',.2f'),
-                alt.Tooltip('volume:Q', title='Volume', format=',.0f')
-            ]
-        )
-
-        layers = [rule, bar]
-        ema9 = alt.Chart(plot_df).mark_line(color='#F59E0B', strokeWidth=1.5).encode(x='timestamp:T', y='ema9:Q')
-        ema21 = alt.Chart(plot_df).mark_line(color='#3B82F6', strokeWidth=1.5).encode(x='timestamp:T', y='ema21:Q')
-        ema50 = alt.Chart(plot_df).mark_line(color='#8B5CF6', strokeWidth=1.5).encode(x='timestamp:T', y='ema50:Q')
-        layers.extend([ema9, ema21, ema50])
-
-        if cpr and hasattr(cpr, 'pivot') and cpr.pivot > 0:
-            cpr_data = pd.DataFrame({'y': [float(cpr.tc), float(cpr.pivot), float(cpr.bc)]})
-            cpr_rule = alt.Chart(cpr_data).mark_rule(strokeDash=[4, 4], color='#64748B', strokeWidth=1.2).encode(y='y:Q')
-            layers.append(cpr_rule)
-
-        levels_records = []
-        if entry_trigger and entry_trigger > 0: levels_records.append({'y': float(entry_trigger), 'color': '#2563EB'})
-        if stop_loss and stop_loss > 0: levels_records.append({'y': float(stop_loss), 'color': '#DC2626'})
-        if target_1 and target_1 > 0: levels_records.append({'y': float(target_1), 'color': '#16A34A'})
-        if target_2 and target_2 > 0: levels_records.append({'y': float(target_2), 'color': '#047857'})
-
-        for lvl in levels_records:
-            r_chart = alt.Chart(pd.DataFrame({'y': [lvl['y']]})).mark_rule(
-                strokeDash=[6, 3],
-                color=lvl['color'],
-                strokeWidth=2.0
-            ).encode(y='y:Q')
-            layers.append(r_chart)
-
-        title_text = f"{symbol} • Daily Candlesticks + EMAs (9/21/50) + CPR + Setup"
-        if strategy_name: title_text += f" [{strategy_name}]"
-        return alt.layer(*layers).properties(width=750, height=440, title=title_text).interactive()
-
+from nse_system.dashboard.components.charts import (
+    plot_rrg_chart,
+    plot_options_oi,
+    plot_equity_curve,
+    plot_stock_strategy_chart
+)
 from nse_system.dashboard.components.metrics_view import render_kpi_cards, render_regime_banner, render_trade_log_table
 
 st.set_page_config(
@@ -130,54 +44,107 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Mobile & Cross-Platform High-Contrast Responsive CSS
-st.markdown("""
-<style>
-    .main-title { font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-bottom: 0.1rem; }
-    .sub-title { font-size: 0.95rem; color: #64748B; margin-bottom: 1.2rem; }
-    .winner-box { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; }
-    .diag-card { background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-bottom: 1rem; color: #0F172A; }
-    .news-card { background: #F8FAFC; border-left: 4px solid #3B82F6; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #0F172A; }
-    
-    /* Universal High-Contrast Metric Cards for Android / iOS / Desktop (Light & Dark Mode) */
-    [data-testid="stMetric"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #CBD5E1 !important;
-        padding: 0.9rem 1.1rem !important;
-        border-radius: 12px !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05) !important;
-    }
-    [data-testid="stMetricValue"] > div {
-        font-size: 1.35rem !important;
-        font-weight: 800 !important;
-        color: #0F172A !important; /* Force high contrast dark text */
-    }
-    [data-testid="stMetricLabel"] > div > p {
-        font-size: 0.85rem !important;
-        font-weight: 700 !important;
-        color: #475569 !important; /* Force readable slate label */
-    }
-    [data-testid="stMetricDelta"] > div {
-        font-size: 0.85rem !important;
-        font-weight: 700 !important;
-    }
+# 🎨 Theme Switcher in Sidebar
+if "theme_mode" not in st.session_state:
+    st.session_state["theme_mode"] = "dark"
 
-    /* Mobile 2-column wrapping for small screens */
-    @media (max-width: 768px) {
-        [data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
+st.sidebar.markdown("### 🎨 Visual Theme")
+theme_choice = st.sidebar.radio(
+    "Select Display Mode",
+    ["🌙 Dark Mode", "☀️ Light Mode"],
+    index=0 if st.session_state["theme_mode"] == "dark" else 1,
+    horizontal=True,
+    key="theme_radio_selector"
+)
+theme_mode = "dark" if "Dark" in theme_choice else "light"
+st.session_state["theme_mode"] = theme_mode
+
+# Dynamic Dark / Light Mode CSS Styling
+if theme_mode == "dark":
+    st.markdown("""
+    <style>
+        .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
+        section[data-testid="stSidebar"] { background-color: #0F172A !important; border-right: 1px solid #1E293B !important; }
+        .main-title { font-size: 1.85rem; font-weight: 800; color: #F8FAFC; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
+        .sub-title { font-size: 0.95rem; color: #94A3B8; margin-bottom: 1.2rem; }
+        .winner-box { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #ECFDF5; }
+        .diag-card { background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 1rem; color: #F8FAFC; }
+        .news-card { background: #1E293B; border-left: 4px solid #38BDF8; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #F8FAFC; border-top: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155; }
+        
+        /* Dark Mode High-Contrast Metric Cards */
+        [data-testid="stMetric"] {
+            background-color: #1E293B !important;
+            border: 1px solid #334155 !important;
+            padding: 0.9rem 1.1rem !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
         }
-        [data-testid="column"] {
-            min-width: 46% !important;
-            flex: 1 1 46% !important;
-            margin-bottom: 0.6rem !important;
+        [data-testid="stMetricValue"] > div {
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
+            color: #F8FAFC !important;
         }
-    }
-</style>
-""", unsafe_allow_html=True)
+        [data-testid="stMetricLabel"] > div > p {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+            color: #94A3B8 !important;
+        }
+        [data-testid="stMetricDelta"] > div {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+        }
+
+        /* Mobile 2-column wrapping for small screens */
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+            [data-testid="column"] { min-width: 46% !important; flex: 1 1 46% !important; margin-bottom: 0.6rem !important; }
+        }
+    </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <style>
+        .stApp { background-color: #F8FAFC !important; color: #0F172A !important; }
+        section[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; }
+        .main-title { font-size: 1.85rem; font-weight: 800; color: #0F172A; margin-bottom: 0.1rem; letter-spacing: -0.02em; }
+        .sub-title { font-size: 0.95rem; color: #64748B; margin-bottom: 1.2rem; }
+        .winner-box { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border: 1px solid #10B981; padding: 1.2rem; border-radius: 12px; margin-bottom: 1rem; color: #065F46; }
+        .diag-card { background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1rem; color: #0F172A; }
+        .news-card { background: #F8FAFC; border-left: 4px solid #3B82F6; padding: 0.8rem; border-radius: 6px; margin-bottom: 0.5rem; color: #0F172A; border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; }
+        
+        /* Light Mode High-Contrast Metric Cards */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #CBD5E1 !important;
+            padding: 0.9rem 1.1rem !important;
+            border-radius: 12px !important;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05) !important;
+        }
+        [data-testid="stMetricValue"] > div {
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
+            color: #0F172A !important;
+        }
+        [data-testid="stMetricLabel"] > div > p {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+            color: #475569 !important;
+        }
+        [data-testid="stMetricDelta"] > div {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+        }
+
+        /* Mobile 2-column wrapping for small screens */
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+            [data-testid="column"] { min-width: 46% !important; flex: 1 1 46% !important; margin-bottom: 0.6rem !important; }
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.markdown("<div class=\"main-title\">🇮🇳 NSE Quantitative Strategy Arena</div>", unsafe_allow_html=True)
-st.markdown("<div class=\"sub-title\">FII/DII Flows • Options OI & PCR • India VIX • RRG Sector Rotation • Multi-Strategy Tournament</div>", unsafe_allow_html=True)
+st.markdown("<div class=\"sub-title\">FII/DII Institutional Flows • Interactive Options OI • RRG Sector Rotation • Multi-Strategy Tournament</div>", unsafe_allow_html=True)
 
 # Instantiate providers
 data_provider = NSEHistoricalDataProvider()
@@ -276,7 +243,11 @@ with tab1:
         rrg_results = {}
     col_rrg, col_summary = st.columns([3, 2])
     with col_rrg:
-        st.altair_chart(plot_rrg_chart(rrg_results), use_container_width=True)
+        st.plotly_chart(
+            plot_rrg_chart(rrg_results, theme=theme_mode),
+            use_container_width=True,
+            config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+        )
     with col_summary:
         st.write(f"**RRG Quadrants ({rrg_mode}):**")
         for sym, pt in rrg_results.items():
@@ -305,7 +276,11 @@ with tab1:
         spot_p = float(NSE_REAL_PRICES.get(opt_sym, 1000.0))
     chain = options_provider.get_options_chain(opt_sym, spot_p, atm_iv=vix_input)
 
-    st.altair_chart(plot_options_oi(chain), use_container_width=True)
+    st.plotly_chart(
+        plot_options_oi(chain, theme=theme_mode),
+        use_container_width=True,
+        config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+    )
     oc1, oc2, oc3, oc4 = st.columns(4)
     with oc1:
         st.metric("Put-Call Ratio (PCR)", f"{chain.pcr_oi:.2f}")
@@ -458,9 +433,14 @@ with tab2:
                 target_1=diag['target_1'],
                 target_2=diag['target_2'],
                 cpr=diag['cpr'],
-                strategy_name=diag['recommended_setup']
+                strategy_name=diag['recommended_setup'],
+                theme=theme_mode
             )
-            st.altair_chart(chart_fav, use_container_width=True)
+            st.plotly_chart(
+                chart_fav,
+                use_container_width=True,
+                config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+            )
 
     # MODE 2: Today's Live Intraday Radar
     elif radar_mode == "⚡ Today's Live Intraday Radar (5m/15m)":
@@ -602,9 +582,14 @@ with tab2:
                     target_1=cand_obj.target_1 if cand_obj else diag_obj['target_1'],
                     target_2=cand_obj.target_2 if cand_obj else diag_obj['target_2'],
                     cpr=diag_obj['cpr'],
-                    strategy_name=cand_obj.matched_strategy if cand_obj else diag_obj['recommended_setup']
+                    strategy_name=cand_obj.matched_strategy if cand_obj else diag_obj['recommended_setup'],
+                    theme=theme_mode
                 )
-                st.altair_chart(st_chart, use_container_width=True)
+                st.plotly_chart(
+                    st_chart,
+                    use_container_width=True,
+                    config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+                )
 
                 # News Headlines
                 if sent_obj.news_items:
@@ -696,9 +681,14 @@ with tab2:
                         target_1=w_diag['target_1'],
                         target_2=w_diag['target_2'],
                         cpr=w_diag['cpr'],
-                        strategy_name=w_diag['recommended_setup']
+                        strategy_name=w_diag['recommended_setup'],
+                        theme=theme_mode
                     )
-                    st.altair_chart(w_chart, use_container_width=True)
+                    st.plotly_chart(
+                        w_chart,
+                        use_container_width=True,
+                        config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+                    )
 
                     if w_sent.news_items:
                         st.markdown("**Company News & Media Catalysts:**")
@@ -809,7 +799,11 @@ with tab4:
     single_perf = bt_engine.run(candles)
 
     render_kpi_cards(single_perf)
-    st.altair_chart(plot_equity_curve(bt_engine.equity_history), use_container_width=True)
+    st.plotly_chart(
+        plot_equity_curve(bt_engine.equity_history, theme=theme_mode),
+        use_container_width=True,
+        config={"scrollZoom": True, "displayModeBar": True, "responsive": True}
+    )
 
     st.markdown("---")
     st.subheader("🧾 Statutory Indian Regulatory Taxes & Brokerage (SEBI / NSE)")
